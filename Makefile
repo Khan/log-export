@@ -1,13 +1,44 @@
+PROJECT_NAME = khan-academy
+STAGING_LOCATION = gs://khan_academy_dataflow
+MACHINE_TYPE = n1-highcpu-4
+
+run_locally:
+	MAVEN_ARGS="-Xmx1G" mvn compile exec\:java \
+		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
+		-Dexec.args=" \
+            --project=$(PROJECT_NAME) \
+            --runner=DirectPipelineRunner \
+            --runBoundedOver=1000 \
+            --topic=projects/khan-academy/topics/request_logs \
+            --outputTable=khan-academy:logs_streaming_test.test_logs"
+
 # Deploy a dataflow pipeline hooked up against the real production data, except
 # that it writes to a test output table and doesn't use the production
 # subscription (and thus doesn't interfere with the production job).
+# This version does not exit and writes job logs to the console.
 deploy_test:
-	mvn compile exec:java \
+	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
-            --project=khan-academy \
-            --stagingLocation=gs://khan_academy_dataflow \
+            --project=$(PROJECT_NAME) \
+            --stagingLocation=$(STAGING_LOCATION) \
+            --workerMachineType=$(MACHINE_TYPE) \
             --runner=BlockingDataflowPipelineRunner \
+            --topic=projects/khan-academy/topics/request_logs \
+            --outputTable=khan-academy:logs_streaming_test.test_logs"
+
+# Deploy a dataflow pipeline hooked up against the real production data, except
+# that it writes to a test output table and doesn't use the production
+# subscription (and thus doesn't interfere with the production job).
+# This version exits as soon as the job has started and doesn't output job logs.
+deploy_test_nonblocking:
+	mvn compile exec\:java \
+		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
+		-Dexec.args=" \
+            --project=$(PROJECT_NAME) \
+            --stagingLocation=$(STAGING_LOCATION) \
+            --workerMachineType=$(MACHINE_TYPE) \
+            --runner=DataflowPipelineRunner \
             --topic=projects/khan-academy/topics/request_logs \
             --outputTable=khan-academy:logs_streaming_test.test_logs"
 
@@ -19,12 +50,13 @@ deploy_test:
 # backlog of work will accumulate on the subscription and this pipeline will
 # begin processing that backlog.
 deploy_prod:
-	mvn compile exec:java \
+	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
-            --project=khan-academy \
-            --stagingLocation=gs://khan_academy_dataflow \
-            --runner=BlockingDataflowPipelineRunner \
+            --project=$(PROJECT_NAME) \
+            --stagingLocation=$(STAGING_LOCATION) \
+            --workerMachineType=$(MACHINE_TYPE) \
+            --runner=DataflowPipelineRunner \
             --subscription=projects/khan-academy/subscriptions/log_export_prod \
             --outputTable=khan-academy:logs_streaming.logs_all_time"
 

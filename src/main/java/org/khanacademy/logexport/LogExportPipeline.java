@@ -37,6 +37,11 @@ public class LogExportPipeline {
         String getTopic();
         void setTopic(String value);
 
+        @Description("Whether this pipeline should run only over a bounded set of N logs. " +
+                "This is useful for testing locally on a small subset of data.")
+        Integer getRunBoundedOver();
+        void setRunBoundedOver(Integer value);
+
         @Description("Fully-qualified BigQuery table name to write to.")
         @Validation.Required
         String getOutputTable();
@@ -58,6 +63,7 @@ public class LogExportPipeline {
 
         String subscription = logExportOptions.getSubscription();
         String topic = logExportOptions.getTopic();
+        Integer runBound = logExportOptions.getRunBoundedOver();
 
         if ((subscription == null) == (topic == null)) {
             throw new IllegalArgumentException(
@@ -69,6 +75,10 @@ public class LogExportPipeline {
             pubSubConfig = pubSubConfig.subscription(subscription);
         } else {
             pubSubConfig = pubSubConfig.topic(topic);
+        }
+
+        if (runBound != null) {
+            pubSubConfig = pubSubConfig.maxNumRecords(runBound);
         }
 
         pipeline.apply(pubSubConfig)
