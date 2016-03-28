@@ -53,10 +53,11 @@ deploy_prod:
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
+            --numWorkers=5 \
             --project=$(PROJECT_NAME) \
             --stagingLocation=$(STAGING_LOCATION) \
             --workerMachineType=$(MACHINE_TYPE) \
             --runner=DataflowPipelineRunner \
-            --subscription=projects/khan-academy/subscriptions/log_export_prod \
+            --subscription=projects/khan-academy/subscriptions/log_export \
             --outputTable=khan-academy:logs_streaming.logs_all_time"
 
