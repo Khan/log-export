@@ -1,6 +1,6 @@
 PROJECT_NAME = khan-academy
 STAGING_LOCATION = gs://khan_academy_dataflow
-MACHINE_TYPE = n1-highcpu-4
+MACHINE_TYPE = n1-standard-4
 
 run_locally:
 	MAVEN_ARGS="-Xmx1G" mvn compile exec\:java \
@@ -53,7 +53,7 @@ deploy_prod:
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
-            --numWorkers=5 \
+            --numWorkers=6 \
             --project=$(PROJECT_NAME) \
             --stagingLocation=$(STAGING_LOCATION) \
             --workerMachineType=$(MACHINE_TYPE) \
