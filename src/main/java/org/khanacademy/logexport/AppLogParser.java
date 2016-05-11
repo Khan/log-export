@@ -3,8 +3,9 @@ package org.khanacademy.logexport;
 import com.google.api.client.util.ArrayMap;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
-import com.google.api.services.logging.model.LogEntry;
-import com.google.api.services.logging.model.LogLine;
+import com.google.api.services.logging.v2beta1.model.LogEntry;
+import com.google.api.services.logging.v2beta1.model.LogLine;
+import com.google.api.services.logging.v2beta1.model.SourceLocation;
 import com.google.common.collect.ImmutableList;
 import org.khanacademy.logexport.Schemas.Type;
 
@@ -36,9 +37,38 @@ public class AppLogParser {
             List<Map<String, Object>> rawLines = (List<Map<String, Object>>) rawLinesObject;
             for (Map<String, Object> rawLine : rawLines) {
                 LogLine logLine = new LogLine();
-                rawLine.entrySet().forEach(entry ->
-                    logLine.set(entry.getKey(), entry.getValue())
-                );
+                rawLine.entrySet().forEach(entry -> {
+                    // For reasons I don't understand, we've started receiving
+                    // logs with a sourceLocation field with a different type
+                    // than the one we require.  This code handles the type
+                    // conversions.
+                    // TODO(colin): figure out why there is this mismatch and if
+                    // there is a better fix
+                    if (entry.getKey().equals("sourceLocation")) {
+                        SourceLocation srcLoc = new SourceLocation();
+                        // Unfortunately we need to do a few unchecked casts
+                        // here, since we get values as plain objects and need
+                        // them as more specifically typed things.  When setting
+                        // the values, there appears to be some built-in runtime
+                        // type checking, so at least we will still know quickly
+                        // if types are wrong.
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> rawLoc = (Map<String, Object>) entry.getValue();
+                        rawLoc.entrySet().forEach(srcLocEntry -> {
+                            Object value = srcLocEntry.getValue();
+                            if (srcLocEntry.getKey().equals("line")) {
+                                @SuppressWarnings("unchecked")
+                                String lineString = (String) value;
+                                srcLoc.set(srcLocEntry.getKey(), Long.parseLong(lineString));
+                            } else {
+                                srcLoc.set(srcLocEntry.getKey(), value);
+                            }
+                        });
+                        logLine.set(entry.getKey(), srcLoc);
+                    } else {
+                        logLine.set(entry.getKey(), entry.getValue());
+                    }
+                });
                 resultBuilder.add(logLine);
             }
         }

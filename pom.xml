@@ -29,7 +29,7 @@
     <dependency>
       <groupId>com.google.apis</groupId>
       <artifactId>google-api-services-logging</artifactId>
-      <version>v1beta3-rev4-1.20.0</version>
+      <version>v2beta1-rev10-1.22.0</version>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>

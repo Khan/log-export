@@ -4,7 +4,7 @@ import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
-import com.google.api.services.logging.model.LogLine;
+import com.google.api.services.logging.v2beta1.model.LogLine;
 import com.google.common.collect.ImmutableList;
 import org.khanacademy.logexport.Schemas.Type;
 

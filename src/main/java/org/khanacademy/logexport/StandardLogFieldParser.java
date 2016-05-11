@@ -2,7 +2,7 @@ package org.khanacademy.logexport;
 
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
-import com.google.api.services.logging.model.LogEntry;
+import com.google.api.services.logging.v2beta1.model.LogEntry;
 import com.google.common.collect.ImmutableList;
 import org.khanacademy.logexport.Schemas.Type;
 
