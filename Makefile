@@ -44,7 +44,8 @@ deploy_test_nonblocking:
 
 # Deploy a dataflow pipeline using the production subscription and output table.
 # Does NOT automatically stop any existing production pipelines that are
-# running; you need to go into the dataflow UI and stop them directly. If a
+# running; you need to go into the dataflow UI and stop them directly:
+# https://console.cloud.google.com/dataflow?project=khan-academy. If a
 # pipeline is running, the log processing work will be split between the two
 # pipelines, since they will share a subscription. If no pipeline is running, a
 # backlog of work will accumulate on the subscription and this pipeline will
