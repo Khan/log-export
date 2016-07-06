@@ -37,6 +37,7 @@ public class EventLogParser {
             eventLogField("device_brand", Type.STRING),
             eventLogField("device_name", Type.STRING),
             eventLogField("device_type", Type.STRING),
+            eventLogField("ka_locale", Type.STRING),
             eventLogField("language", Type.STRING),
             eventLogField("orig_request_id", Type.STRING),
             eventLogField("os", Type.STRING),
