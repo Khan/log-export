@@ -32,6 +32,7 @@ public class EventLogParser {
             eventLogField("KA_APP", Type.BOOLEAN),
             eventLogField("app_version", Type.STRING),
             eventLogField("browser", Type.STRING),
+            eventLogField("client_ip", Type.STRING),
             eventLogField("country", Type.STRING),
             eventLogField("device_brand", Type.STRING),
             eventLogField("device_name", Type.STRING),
@@ -43,6 +44,7 @@ public class EventLogParser {
             eventLogField("retries", Type.INTEGER),
             eventLogField("session_id", Type.STRING),
             eventLogField("session_start", Type.INTEGER),
+            eventLogField("test_prep_client_logging", Type.STRING),
             eventLogField("touch", Type.BOOLEAN),
             eventLogField("url_route", Type.STRING),
             eventLogField("user_bingo_id", Type.STRING),
@@ -61,17 +63,21 @@ public class EventLogParser {
                     .uniqueIndex(field -> field.name);
 
     private static List<EventLogField> CATEGORIES = ImmutableList.of(
+            eventLogField("auth.", Type.STRING),
             eventLogField("bingo.", Type.STRING),
             eventLogField("content_survey.", Type.STRING),
             eventLogField("id.", Type.STRING),
+            eventLogField("learn_storm.final.", Type.STRING),
             eventLogField("stats.bingo.", Type.INTEGER),
             eventLogField("stats.english_visibility.", Type.FLOAT),
             eventLogField("stats.logging.", Type.INTEGER),
+            eventLogField("stats.react_render_server.", Type.INTEGER),
             eventLogField("stats.rpc.", Type.INTEGER),
             eventLogField("stats.rpc_info.", Type.STRING),
             eventLogField("stats.rpc_ops.", Type.INTEGER),
             eventLogField("stats.search.", Type.INTEGER),
-            eventLogField("stats.time.", Type.INTEGER)
+            eventLogField("stats.time.", Type.INTEGER),
+            eventLogField("stats.untranslated_text_seen.", Type.STRING)
     );
 
     public List<TableFieldSchema> getSchemaFields() {
