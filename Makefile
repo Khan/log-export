@@ -17,6 +17,7 @@ run_locally:
 # subscription (and thus doesn't interfere with the production job).
 # This version does not exit and writes job logs to the console.
 deploy_test:
+	./update_schema.py -t logs_streaming_test.test_logs
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
@@ -32,6 +33,7 @@ deploy_test:
 # subscription (and thus doesn't interfere with the production job).
 # This version exits as soon as the job has started and doesn't output job logs.
 deploy_test_nonblocking:
+	./update_schema.py -t logs_streaming_test.test_logs
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
@@ -63,4 +65,4 @@ deploy_prod:
             --runner=DataflowPipelineRunner \
             --subscription=projects/khan-academy/subscriptions/log_export \
             --outputTable=khan-academy:logs_streaming.logs_all_time"
-
+	./update_schema.py -t logs_streaming.logs_all_time
