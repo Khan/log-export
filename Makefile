@@ -55,6 +55,7 @@ deploy_test_nonblocking:
 # running, a backlog of work will accumulate on the subscription and this
 # pipeline will begin processing that backlog.
 deploy_prod:
+	./update_schema.py -t logs_streaming.logs_all_time
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
@@ -65,4 +66,6 @@ deploy_prod:
             --runner=DataflowPipelineRunner \
             --subscription=projects/khan-academy/subscriptions/log_export \
             --outputTable=khan-academy:logs_streaming.logs_all_time"
-	./update_schema.py -t logs_streaming.logs_all_time
+	echo "Now visit"
+	echo "   https://console.cloud.google.com/dataflow?project=khan-academy"
+	echo "to disable the old dataflow job"
