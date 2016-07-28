@@ -31,11 +31,11 @@ object LogExportPipeline {
     }
 
     @JvmStatic fun main(args: Array<String>) {
-        PipelineOptionsFactory.register(LogExportOptions::class.java!!)
+        PipelineOptionsFactory.register(LogExportOptions::class.java)
 
         val pipelineOptions = PipelineOptionsFactory.fromArgs(args).withValidation().create()
         val logExportOptions = pipelineOptions.`as`<LogExportOptions>(LogExportOptions::class.java)
-        PipelineOptionsValidator.validate<LogExportOptions>(LogExportOptions::class.java!!, logExportOptions)
+        PipelineOptionsValidator.validate<LogExportOptions>(LogExportOptions::class.java, logExportOptions)
 
         val dataflowOptions = pipelineOptions.`as`<DataflowPipelineOptions>(DataflowPipelineOptions::class.java)
         dataflowOptions.isStreaming = true
@@ -78,12 +78,12 @@ object LogExportPipeline {
         @Transient private var logsExtractor: LogsExtractor? = null
 
         @Throws(Exception::class)
-        override fun startBundle(c: DoFn.Context?) {
+        override fun startBundle(c: DoFn<String, TableRow>.Context?) {
             logsExtractor = LogsExtractor.create()
         }
 
         @Throws(Exception::class)
-        override fun processElement(c: DoFn.ProcessContext) {
+        override fun processElement(c: DoFn<String, TableRow>.ProcessContext) {
             val logJson = c.element()
             val parsedLog = JSON_FACTORY.fromString<LogEntry>(logJson, LogEntry::class.java)
             c.output(logsExtractor!!.extractLogs(parsedLog))

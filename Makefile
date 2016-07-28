@@ -10,7 +10,7 @@ run_locally:
             --runner=DirectPipelineRunner \
             --runBoundedOver=1000 \
             --topic=projects/khan-academy/topics/request_logs \
-            --outputTable=khan-academy:logs_streaming_test.test_logs"
+            --outputTable=khan-academy:logs_streaming_test.test_logs_kotlin"
 
 # Deploy a dataflow pipeline hooked up against the real production data, except
 # that it writes to a test output table and doesn't use the production

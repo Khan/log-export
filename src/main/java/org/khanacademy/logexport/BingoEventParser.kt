@@ -28,8 +28,8 @@ class BingoEventParser {
                         Schemas.field("extra", Type.STRING)))
 
     fun populateBingoEventFields(row: TableRow, logLines: List<LogLine>) {
-        val participationEvents = ArrayList<Any>()
-        val conversionEvents = ArrayList<Any>()
+        val participationEvents = ArrayList<Any?>()
+        val conversionEvents = ArrayList<Any?>()
 
         for (logLine in logLines) {
             val logMessage = logLine.logMessage ?: continue

@@ -25,8 +25,8 @@ class EventLogParser {
     val schemaFields: List<TableFieldSchema>
         get() {
             val resultBuilder = ImmutableList.builder<TableFieldSchema>()
-            for (field in UNIQUE_OCCURRENCE_KEYS) {
-                resultBuilder.add(Schemas.field(field.columnName, field.type))
+            for (elogField in UNIQUE_OCCURRENCE_KEYS) {
+                resultBuilder.add(Schemas.field(elogField.columnName, elogField.type))
             }
             for (category in CATEGORIES) {
                 resultBuilder.add(Schemas.repeatedRecord(category.columnName,
@@ -58,12 +58,11 @@ class EventLogParser {
     private fun processKeyValuePair(row: TableRow, key: String, value: String) {
         // TODO(alan): Doing a startsWith for every category for every event is kind of expensive.
         // Maybe profile this code and see if it's worth doing something more clever.
-        val foundCategory = CATEGORIES.stream().filter({ category -> category.name.startsWith(key) }).findFirst()
+        val foundCategory = CATEGORIES.filter({ category -> category.name.startsWith(key) }).firstOrNull()
 
-        if (foundCategory.isPresent()) {
-            val eventLogField = foundCategory.get()
-            @SuppressWarnings("unchecked")
-            var jsonEvents: MutableList<Map<String, Any>>? = row[eventLogField.columnName] as List<Map<String, Any>>
+        if (foundCategory != null) {
+            val eventLogField = foundCategory
+            var jsonEvents: MutableList<Map<String, Any>>? = row[eventLogField.columnName] as? MutableList<Map<String, Any>>
             if (jsonEvents == null) {
                 jsonEvents = ArrayList<Map<String, Any>>()
                 row.set(eventLogField.columnName, jsonEvents)
@@ -94,8 +93,8 @@ class EventLogParser {
                     Schemas.Type.INTEGER -> return java.lang.Long.parseLong(decodedValue)
                     Schemas.Type.FLOAT -> return BigDecimal(decodedValue)
                     Schemas.Type.BOOLEAN -> return java.lang.Boolean.parseBoolean(decodedValue)
-                }// Fall through to failure case.
-                throw UnsupportedOperationException("Unsupported event log type: " + type)
+                    else -> throw UnsupportedOperationException("Unsupported event log type: " + type)
+                }
             } catch (e: UnsupportedEncodingException) {
                 return null
             } catch (e: NumberFormatException) {
@@ -106,12 +105,12 @@ class EventLogParser {
     }
 
     companion object {
-        private val LOG = LoggerFactory.getLogger(EventLogParser::class.java!!)
+        private val LOG = LoggerFactory.getLogger(EventLogParser::class.java)
         private val EVENT_LOG_PREFIX = "KALOG"
 
         // TODO(alan): Make it easier to keep these values in sync with webapp. For example, we could
         // have webapp output a JSON dump of this data and populate these values from the JSON.
-        private val UNIQUE_OCCURRENCE_KEYS = ImmutableList.of(
+        private val UNIQUE_OCCURRENCE_KEYS = listOf(
                 eventLogField("KA_APP", Type.BOOLEAN),
                 eventLogField("app_version", Type.STRING),
                 eventLogField("browser", Type.STRING),
@@ -141,7 +140,8 @@ class EventLogParser {
                 eventLogField("user_kaid", Type.STRING),
                 eventLogField("user_phantom_creation_date", Type.INTEGER))
 
-        private val UNIQUE_OCCURRENCE_KEYS_BY_NAME = FluentIterable.from(UNIQUE_OCCURRENCE_KEYS).uniqueIndex<String>({ field -> field.name })
+        private val UNIQUE_OCCURRENCE_KEYS_BY_NAME = UNIQUE_OCCURRENCE_KEYS.associate({
+            field -> Pair(field.name, field) })
 
         private val CATEGORIES = ImmutableList.of(
                 eventLogField("auth.", Type.STRING),

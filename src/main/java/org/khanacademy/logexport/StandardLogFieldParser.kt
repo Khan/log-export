@@ -14,13 +14,14 @@ import java.util.stream.Collectors
 class StandardLogFieldParser {
 
     val schemaFields: List<TableFieldSchema>
-        get() = ALL_FIELDS.stream().map({ field -> TableFieldSchema().setName(field.bigQueryName).setType(field.type.toString()) }).collect(Collectors.toList<TableFieldSchema>())
+        get() = ALL_FIELDS
+                .map({ field -> TableFieldSchema().setName(field.bigQueryName).setType(field.type.toString()) })
 
     fun populateStandardLogFields(row: TableRow, logEntry: LogEntry) {
         for (field in ALL_FIELDS) {
             var value: Any? = logEntry.protoPayload[field.protoPayloadName]
             if (field.transformer != null) {
-                value = field.transformer.transform(value)
+                value = field.transformer.invoke(value)
             }
             if (value != null) {
                 row.set(field.bigQueryName, value)
@@ -28,23 +29,16 @@ class StandardLogFieldParser {
         }
     }
 
-    private class StandardLogField(private val bigQueryName: String, private val type: Type, private val protoPayloadName: String,
-                                   private val transformer: Transformer?)
-
-    /**
-     * Optional transformation to make on a field value before sending to BigQuery.
-     */
-    private interface Transformer {
-        fun transform(`object`: Any): Any?
-    }
+    private class StandardLogField(val bigQueryName: String, val type: Type, val protoPayloadName: String,
+                                   val transformer: ((Any?) -> Any?)?)
 
     companion object {
         private val ALL_FIELDS = ImmutableList.of(
                 logField("ip", Type.STRING, "ip"),
                 logField("nickname", Type.STRING, "nickname"),
-                logField("start_time", Type.FLOAT, "startTime", Transformer { LogParsingUtils.dateToSeconds(it) }),
+                logField("start_time", Type.FLOAT, "startTime", { LogParsingUtils.dateToSeconds(it) }),
                 logField("start_time_timestamp", Type.TIMESTAMP, "startTime"),
-                logField("end_time", Type.FLOAT, "endTime", Transformer { LogParsingUtils.dateToSeconds(it) }),
+                logField("end_time", Type.FLOAT, "endTime", { LogParsingUtils.dateToSeconds(it) }),
                 logField("end_time_timestamp", Type.TIMESTAMP, "endTime"),
                 logField("method", Type.STRING, "method"),
                 logField("resource", Type.STRING, "resource"),
@@ -54,8 +48,8 @@ class StandardLogFieldParser {
                 logField("referrer", Type.STRING, "referrer"),
                 logField("user_agent", Type.STRING, "userAgent"),
                 logField("host", Type.STRING, "host"),
-                logField("latency", Type.FLOAT, "latency", Transformer { LogParsingUtils.parseDuration(it) }),
-                logField("pending_time", Type.FLOAT, "pendingTime", Transformer { LogParsingUtils.parseDuration(it) }),
+                logField("latency", Type.FLOAT, "latency", { LogParsingUtils.parseDuration(it) }),
+                logField("pending_time", Type.FLOAT, "pendingTime", { LogParsingUtils.parseDuration(it) }),
                 logField("mcycles", Type.INTEGER, "megaCycles"),
                 logField("cost", Type.FLOAT, "cost"),
                 logField("task_queue_name", Type.STRING, "taskQueueName"),
@@ -70,7 +64,7 @@ class StandardLogFieldParser {
 
         private fun logField(
                 bigQueryName: String, type: Type, logEntryName: String,
-                transformer: Transformer? = null): StandardLogField {
+                transformer: ((Any?) -> Any?)?  = null): StandardLogField {
             return StandardLogField(bigQueryName, type, logEntryName, transformer)
         }
     }

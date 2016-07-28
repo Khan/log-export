@@ -27,10 +27,11 @@ class AppLogParser {
      */
     fun getLogLines(logEntry: LogEntry): List<LogLine> {
         val resultBuilder = ImmutableList.builder<LogLine>()
-        val rawLinesObject = logEntry.protoPayload["line"]
-        if (rawLinesObject is List<Any>) {
-            @SuppressWarnings("unchecked")
-            val rawLines = rawLinesObject as List<Map<String, Any>>
+        // This is an unchecked cast because of type erasure.  Annoying.  But the alternative of checking each element
+        // is awful, and it's not clear to me that we actually want to continue processing if we're suddenly getting
+        // logs in a different format anyway...
+        val rawLines = logEntry.protoPayload["line"] as? List<Map<String, Any>>
+        if (rawLines != null) {
             for (rawLine in rawLines) {
                 val logLine = LogLine()
                 rawLine.entries.forEach { entry ->
@@ -42,18 +43,15 @@ class AppLogParser {
                     // there is a better fix
                     if (entry.key == "sourceLocation") {
                         val srcLoc = SourceLocation()
-                        // Unfortunately we need to do a few unchecked casts
-                        // here, since we get values as plain objects and need
-                        // them as more specifically typed things.  When setting
-                        // the values, there appears to be some built-in runtime
-                        // type checking, so at least we will still know quickly
-                        // if types are wrong.
-                        entry.value.entries.forEach { srcLocEntry ->
-                            val value = srcLocEntry.value
-                            if (srcLocEntry.key == "line") {
-                                srcLoc.set(srcLocEntry.key, java.lang.Long.parseLong(value))
-                            } else {
-                                srcLoc.set(srcLocEntry.key, value)
+                        val entryValue = entry.value as? Map<String, Any>
+                        if (entryValue != null) {
+                            entryValue.entries.forEach { srcLocEntry ->
+                                val value = srcLocEntry.value
+                                if (srcLocEntry.key == "line" && value is String) {
+                                    srcLoc.set(srcLocEntry.key, java.lang.Long.parseLong(value))
+                                } else {
+                                    srcLoc.set(srcLocEntry.key, value)
+                                }
                             }
                         }
                         logLine.set(entry.key, srcLoc)
@@ -68,14 +66,14 @@ class AppLogParser {
     }
 
     fun populateAppLogField(row: TableRow, logLines: List<LogLine>) {
-        val appLogs = logLines.stream().map({ logLine ->
+        val appLogs = logLines.map({ logLine: LogLine ->
             val appLogMap = ArrayMap<String, Any>()
             appLogMap.put("time", LogParsingUtils.dateToSeconds(logLine.getTime()))
             appLogMap.put("time_timestamp", logLine.getTime())
             appLogMap.put("level", LogParsingUtils.parseSeverity(logLine.getSeverity()))
             appLogMap.put("message", logLine.getLogMessage())
             appLogMap
-        }).collect(Collectors.toList<ArrayMap<String, Any>>())
+        })
         row.set("app_logs", appLogs)
     }
 }

@@ -11,7 +11,7 @@ object LogParsingUtils {
      * The proto payload gives dates in ISO 8601 format with microsecond precision. Change that to
      * UNIX time in seconds as a BigDecimal.
      */
-    fun dateToSeconds(`object`: Any): BigDecimal? {
+    fun dateToSeconds(`object`: Any?): BigDecimal? {
         if (`object` is String) {
             val instant = Instant.parse(`object`)
             val seconds = instant.epochSecond
@@ -25,7 +25,7 @@ object LogParsingUtils {
      * The proto payload has some strings like "0.282637s". Change them to a float of the number of
      * seconds.
      */
-    fun parseDuration(`object`: Any): BigDecimal? {
+    fun parseDuration(`object`: Any?): BigDecimal? {
         if (`object` is String) {
             if (`object`.endsWith("s")) {
                 try {
