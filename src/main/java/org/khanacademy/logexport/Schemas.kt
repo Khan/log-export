@@ -11,11 +11,17 @@ import java.util.Arrays
  */
 object Schemas {
     fun repeatedRecord(name: String, vararg fields: TableFieldSchema): TableFieldSchema {
-        return TableFieldSchema().setName(name).setType(Type.RECORD.toString()).setMode("REPEATED").setFields(Arrays.asList(*fields))
+        return TableFieldSchema()
+                .setName(name)
+                .setType(Type.RECORD.toString())
+                .setMode("REPEATED")
+                .setFields(Arrays.asList(*fields))
     }
 
     fun field(name: String, type: Type): TableFieldSchema {
-        return TableFieldSchema().setName(name).setType(type.toString())
+        return TableFieldSchema()
+                .setName(name)
+                .setType(type.toString())
     }
 
     enum class Type {

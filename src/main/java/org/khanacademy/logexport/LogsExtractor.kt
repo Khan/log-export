@@ -1,11 +1,9 @@
 package org.khanacademy.logexport
 
-import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.bigquery.model.TableFieldSchema
 import com.google.api.services.bigquery.model.TableRow
 import com.google.api.services.bigquery.model.TableSchema
 import com.google.api.services.logging.v2beta1.model.LogEntry
-import com.google.api.services.logging.v2beta1.model.LogLine
 
 import java.io.IOException
 import java.util.ArrayList

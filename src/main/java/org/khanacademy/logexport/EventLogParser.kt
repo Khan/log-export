@@ -1,20 +1,15 @@
 package org.khanacademy.logexport
 
-import com.google.api.client.util.ArrayMap
 import com.google.api.services.bigquery.model.TableFieldSchema
 import com.google.api.services.bigquery.model.TableRow
 import com.google.api.services.logging.v2beta1.model.LogLine
-import com.google.common.collect.FluentIterable
-import com.google.common.collect.ImmutableList
 import org.khanacademy.logexport.Schemas.Type
-import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 
 import java.io.UnsupportedEncodingException
 import java.math.BigDecimal
 import java.net.URLDecoder
 import java.util.ArrayList
-import java.util.Optional
 
 /**
  * Parse event log values, both categorized events and unique-occurence keys, as defined by
@@ -24,16 +19,16 @@ class EventLogParser {
 
     val schemaFields: List<TableFieldSchema>
         get() {
-            val resultBuilder = ImmutableList.builder<TableFieldSchema>()
-            for (elogField in UNIQUE_OCCURRENCE_KEYS) {
-                resultBuilder.add(Schemas.field(elogField.columnName, elogField.type))
-            }
-            for (category in CATEGORIES) {
-                resultBuilder.add(Schemas.repeatedRecord(category.columnName,
-                        Schemas.field("key", Type.STRING),
-                        Schemas.field("value", category.type)))
-            }
-            return resultBuilder.build()
+            val result = UNIQUE_OCCURRENCE_KEYS
+                    .map { Schemas.field(it.columnName, it.type) }
+                    .toMutableList()
+            result.addAll(CATEGORIES.map {
+                        Schemas.repeatedRecord(it.columnName,
+                                Schemas.field("key", Type.STRING),
+                                Schemas.field("value", it.type))
+
+                    })
+            return result.toList()
         }
 
     fun populateEventLogFields(row: TableRow, logLines: List<LogLine>) {
@@ -62,15 +57,18 @@ class EventLogParser {
 
         if (foundCategory != null) {
             val eventLogField = foundCategory
-            var jsonEvents: MutableList<Map<String, Any>>? = row[eventLogField.columnName] as? MutableList<Map<String, Any>>
+            var jsonEvents: MutableList<Map<String, Any?>>? = row[eventLogField.columnName] as? MutableList<Map<String, Any?>>
             if (jsonEvents == null) {
-                jsonEvents = ArrayList<Map<String, Any>>()
+                jsonEvents = ArrayList<Map<String, Any?>>()
                 row.set(eventLogField.columnName, jsonEvents)
             }
-            val newEvent = ArrayMap<String, Any>()
-            newEvent.put("key", key)
-            newEvent.put("value", eventLogField.parseValue(value))
-            jsonEvents.add(newEvent)
+            jsonEvents.add(
+                    mapOf(
+                            "key" to key,
+                            "value" to eventLogField.parseValue(value)
+                    )
+            )
+
         } else {
             val eventLogField = UNIQUE_OCCURRENCE_KEYS_BY_NAME[key]
             if (eventLogField != null) {
@@ -140,10 +138,10 @@ class EventLogParser {
                 eventLogField("user_kaid", Type.STRING),
                 eventLogField("user_phantom_creation_date", Type.INTEGER))
 
-        private val UNIQUE_OCCURRENCE_KEYS_BY_NAME = UNIQUE_OCCURRENCE_KEYS.associate({
-            field -> Pair(field.name, field) })
+        private val UNIQUE_OCCURRENCE_KEYS_BY_NAME = UNIQUE_OCCURRENCE_KEYS
+                .associate({ field -> Pair(field.name, field) })
 
-        private val CATEGORIES = ImmutableList.of(
+        private val CATEGORIES = listOf(
                 eventLogField("auth.", Type.STRING),
                 eventLogField("bingo.", Type.STRING),
                 eventLogField("content_survey.", Type.STRING),

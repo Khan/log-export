@@ -1,6 +1,5 @@
 package org.khanacademy.logexport
 
-import com.google.api.client.util.ArrayMap
 import com.google.api.services.bigquery.model.TableFieldSchema
 import com.google.api.services.bigquery.model.TableRow
 import com.google.api.services.logging.v2beta1.model.LogEntry
@@ -8,7 +7,6 @@ import com.google.api.services.logging.v2beta1.model.LogLine
 import com.google.api.services.logging.v2beta1.model.SourceLocation
 import com.google.common.collect.ImmutableList
 import org.khanacademy.logexport.Schemas.Type
-import java.util.stream.Collectors
 
 /**
  * Parser for the app_logs (or protoPayload.line) field.
@@ -67,12 +65,12 @@ class AppLogParser {
 
     fun populateAppLogField(row: TableRow, logLines: List<LogLine>) {
         val appLogs = logLines.map({ logLine: LogLine ->
-            val appLogMap = ArrayMap<String, Any>()
-            appLogMap.put("time", LogParsingUtils.dateToSeconds(logLine.getTime()))
-            appLogMap.put("time_timestamp", logLine.getTime())
-            appLogMap.put("level", LogParsingUtils.parseSeverity(logLine.getSeverity()))
-            appLogMap.put("message", logLine.getLogMessage())
-            appLogMap
+            mapOf(
+                "time" to LogParsingUtils.dateToSeconds(logLine.getTime()),
+                "time_timestamp" to logLine.getTime(),
+                "level" to LogParsingUtils.parseSeverity(logLine.getSeverity()),
+                "message" to logLine.getLogMessage()
+            )
         })
         row.set("app_logs", appLogs)
     }

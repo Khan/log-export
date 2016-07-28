@@ -33,11 +33,16 @@ object LogExportPipeline {
     @JvmStatic fun main(args: Array<String>) {
         PipelineOptionsFactory.register(LogExportOptions::class.java)
 
-        val pipelineOptions = PipelineOptionsFactory.fromArgs(args).withValidation().create()
-        val logExportOptions = pipelineOptions.`as`<LogExportOptions>(LogExportOptions::class.java)
+        val pipelineOptions = PipelineOptionsFactory
+                .fromArgs(args)
+                .withValidation()
+                .create()
+        val logExportOptions = pipelineOptions
+                .`as`<LogExportOptions>(LogExportOptions::class.java)
         PipelineOptionsValidator.validate<LogExportOptions>(LogExportOptions::class.java, logExportOptions)
 
-        val dataflowOptions = pipelineOptions.`as`<DataflowPipelineOptions>(DataflowPipelineOptions::class.java)
+        val dataflowOptions = pipelineOptions
+                .`as`<DataflowPipelineOptions>(DataflowPipelineOptions::class.java)
         dataflowOptions.isStreaming = true
 
         val pipeline = Pipeline.create(pipelineOptions)

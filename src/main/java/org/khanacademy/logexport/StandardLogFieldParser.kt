@@ -15,7 +15,10 @@ class StandardLogFieldParser {
 
     val schemaFields: List<TableFieldSchema>
         get() = ALL_FIELDS
-                .map({ field -> TableFieldSchema().setName(field.bigQueryName).setType(field.type.toString()) })
+                .map({ field ->
+                    TableFieldSchema()
+                            .setName(field.bigQueryName)
+                            .setType(field.type.toString()) })
 
     fun populateStandardLogFields(row: TableRow, logEntry: LogEntry) {
         for (field in ALL_FIELDS) {
@@ -33,7 +36,7 @@ class StandardLogFieldParser {
                                    val transformer: ((Any?) -> Any?)?)
 
     companion object {
-        private val ALL_FIELDS = ImmutableList.of(
+        private val ALL_FIELDS = listOf(
                 logField("ip", Type.STRING, "ip"),
                 logField("nickname", Type.STRING, "nickname"),
                 logField("start_time", Type.FLOAT, "startTime", { LogParsingUtils.dateToSeconds(it) }),

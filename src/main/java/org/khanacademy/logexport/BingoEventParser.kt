@@ -1,11 +1,9 @@
 package org.khanacademy.logexport
 
-import com.google.api.client.json.JsonFactory
 import com.google.api.client.json.jackson2.JacksonFactory
 import com.google.api.services.bigquery.model.TableFieldSchema
 import com.google.api.services.bigquery.model.TableRow
 import com.google.api.services.logging.v2beta1.model.LogLine
-import com.google.common.collect.ImmutableList
 import org.khanacademy.logexport.Schemas.Type
 
 import java.io.IOException
@@ -17,7 +15,7 @@ import java.util.ArrayList
 class BingoEventParser {
 
     val schemaFields: List<TableFieldSchema>
-        get() = ImmutableList.of(
+        get() = listOf(
                 Schemas.repeatedRecord("bingo_participation_events",
                         Schemas.field("bingo_id", Type.STRING),
                         Schemas.field("experiment", Type.STRING),
