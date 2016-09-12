@@ -106,7 +106,11 @@ public class LogExportPipeline {
         public void processElement(ProcessContext c) throws Exception {
             String logJson = c.element();
             LogEntry parsedLog = JSON_FACTORY.fromString(logJson, LogEntry.class);
-            c.output(logsExtractor.extractLogs(parsedLog));
+
+            // Only deal with this if it's a request log.
+            if (ClassifyLog.getLogType(parsedLog) == LogType.REQUEST_LOG) {
+                c.output(logsExtractor.extractLogs(parsedLog));
+            }
         }
     }
 }
