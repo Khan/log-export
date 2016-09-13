@@ -38,13 +38,17 @@ public class LogsExtractor {
                 new EventLogParser(), new BingoEventParser());
     }
 
-    public TableSchema getSchema() {
+    public List<TableFieldSchema> getSchemaFields() {
         List<TableFieldSchema> fields = new ArrayList<>();
         fields.addAll(mStandardLogFieldParser.getSchemaFields());
         fields.add(mAppLogParser.getSchemaField());
         fields.addAll(mEventLogParser.getSchemaFields());
         fields.addAll(mBingoEventParser.getSchemaFields());
-        return new TableSchema().setFields(fields);
+        return fields;
+    }
+
+    public TableSchema getSchema() {
+        return new TableSchema().setFields(getSchemaFields());
     }
 
     public TableRow extractLogs(LogEntry logEntry) throws IOException {

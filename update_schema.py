@@ -1,26 +1,16 @@
 #!/usr/bin/env python
 
-"""Update the logs_streaming schema to add new elog_* fields.
+"""Update the logs_streaming schema to match what the streaming job wants.
 
-The goal of the logs_streaming.logs_all_time table is to be a
-streaming version of the daily logs table in
-logs.requestlogs_YYYYMMDD.  This means that whenever we add new fields
-(aka columns) to the requestlogs table, we should add it to the
-streaming table as well.  This is the script that does that.
+Our logexport script writes records to the bigquery
+khan-academy:logs_streaming.logs_all_time table.  It hard-codes what
+columns it writes, and there will be an error if the bigquery table's
+schema does not include all those columns.  This script updates the
+bigquery table to make sure they match.
 
-(In practice, new columns are added to the requestlogs table when a
-new event-log is added to event_log.py.  The logs_to_bq script
-automatically notices this and adds the new column to the bq table at
-that time.)
-
-This script works by downloading the schema of the latest
-requestlogs_YYYYMMDD table, merging it with the schema of the existing
-logs-streaming table, and updating the logs-streaming schema to be the
-new merged thing.
-
-You should run this whenever adding new elog fields to this dataflow
-job.  To make it easy to remember, we run the script automatically in
-the Makefile.
+You should run this whenever adding new elog fields to
+EventLogParser.java.  To make it easy to remember, we run the script
+automatically in the Makefile.
 
 This script needs the 'bq' binary to be installed and authenticated.
 """
@@ -46,25 +36,25 @@ def _bq(project, command_list):
     return json.loads(data)
 
 
-def _latest_requestlogs_table():
-    """The table-name of the most recent requestlogs table."""
-    data = _bq(_KHAN_PROJECT, ['ls', '-n', '100000', 'logs'])
-    all_tables = [d['tableId'] for d in data if d['Type'] == 'TABLE']
-    return 'logs.%s' % sorted(all_tables)[-1]
-
-
 def _schema(project, table_name):
     """`project` is one of _KHAN_PROJECT or _KHAN_ACADEMY_PROJECT."""
     data = _bq(project, ['show', table_name])
     return data['schema']['fields']
 
 
-def _merge_schemas(logs_schema, streaming_schema):
+def _schema_from_java():
+    data = subprocess.check_output(
+        ['mvn', '-q', 'compile', 'exec:java',
+         '-Dexec.mainClass=org.khanacademy.logexport.ListSchema'])
+    return json.loads(data)
+
+
+def _merge_schemas(streaming_schema, schema_that_java_will_write):
     """Returns streaming_schema + logs_schema.
 
     Each entry of foo_schema looks like this:
       {
-        "mode": "REQUIRED",
+        "mode": "REQUIRED",         # may be missing
         "name": "url_map_entry",
         "type": "STRING"
       },
@@ -82,7 +72,7 @@ def _merge_schemas(logs_schema, streaming_schema):
     # First, let's get a more efficient representation of streaming_schema.
     streaming_map = {field['name']: field for field in streaming_schema}
 
-    for logs_field in logs_schema:
+    for logs_field in schema_that_java_will_write:
         if logs_field['name'] not in streaming_map:
             streaming_schema.append(logs_field)
         elif logs_field['type'] == 'RECORD':
@@ -118,15 +108,15 @@ def _update_schema(project, table_name, new_schema):
 
 
 def main(streaming_table, dry_run=False):
-    print "Finding latest requestlog table"
-    logs_table = _latest_requestlogs_table()
-
-    print "Getting schemas"
-    logs_schema = _schema(_KHAN_PROJECT, logs_table)
+    print "Getting existing schema"
     streaming_schema = _schema(_KHAN_ACADEMY_PROJECT, streaming_table)
 
+    print "Getting schema that the java streaming job is expecting"
+    schema_that_java_will_write = _schema_from_java()
+
     print "Merging schemas"
-    new_streaming_schema = _merge_schemas(logs_schema, streaming_schema)
+    new_streaming_schema = _merge_schemas(streaming_schema,
+                                          schema_that_java_will_write)
     _delete_mode(new_streaming_schema)
 
     # This diffing is taken from unittest.case.assertSequenceEqual
@@ -137,7 +127,9 @@ def main(streaming_table, dry_run=False):
         pprint.pformat(streaming_schema).splitlines(),
         pprint.pformat(new_streaming_schema).splitlines()))
 
-    if dry_run:
+    if streaming_schema == new_streaming_schema:
+        print "No differences, no need to update schema."
+    elif dry_run:
         print "Not updating schema, dry-run specified."
     else:
         print "Updating schemas"
