@@ -13,6 +13,8 @@ import com.google.cloud.dataflow.sdk.options.*;
 import com.google.cloud.dataflow.sdk.transforms.DoFn;
 import com.google.cloud.dataflow.sdk.transforms.ParDo;
 
+import java.lang.IllegalArgumentException;
+
 /**
  * Entry point for the Log Export process.
  */
@@ -87,8 +89,7 @@ public class LogExportPipeline {
                                 .to(logExportOptions.getOutputTable())
                                 .withWriteDisposition(WriteDisposition.WRITE_APPEND)
                                 .withCreateDisposition(CreateDisposition.CREATE_IF_NEEDED)
-                                .withSchema(LogsExtractor.create().getSchema())
-                );
+                                .withSchema(LogsExtractor.create().getSchema()));
 
         pipeline.run();
     }
@@ -106,11 +107,8 @@ public class LogExportPipeline {
         public void processElement(ProcessContext c) throws Exception {
             String logJson = c.element();
             LogEntry parsedLog = JSON_FACTORY.fromString(logJson, LogEntry.class);
-
-            // Only deal with this if it's a request log.
-            if (ClassifyLog.getLogType(parsedLog) == LogType.REQUEST_LOG) {
-                c.output(logsExtractor.extractLogs(parsedLog));
-            }
+            LogEntry transformedLog = LogTransformer.transform(parsedLog);
+            c.output(logsExtractor.extractLogs(transformedLog));
         }
     }
 }
