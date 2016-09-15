@@ -40,6 +40,7 @@ public class StandardLogFieldParser {
             logField("module_id", Type.STRING, "moduleId"),
             logField("version_id", Type.STRING, "versionId"),
             logField("request_id", Type.STRING, "requestId"),
+            logField("thread_id", Type.STRING, "threadId"),
             logField("replica_index", Type.INTEGER, "instanceIndex"),
             logField("url_map_entry", Type.STRING, "urlMapEntry"),
             logField("was_loading_request", Type.BOOLEAN, "wasLoadingRequest")
