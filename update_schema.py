@@ -100,7 +100,7 @@ def _update_schema(project, table_name, new_schema):
         json.dump(new_schema, f)
         f.flush()
         # We don't call _bq here because it doesn't return json!
-        subprocess.check_call(_BQ + project +
+        subprocess.check_call(_BQ + ['--project_id', project] +
                               ['update', '--schema=%s' % f.name, table_name])
 
 
