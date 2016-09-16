@@ -17,6 +17,7 @@ This script needs the 'bq' binary to be installed and authenticated.
 
 import difflib
 import json
+import logging
 import pprint
 import subprocess
 import tempfile
@@ -24,20 +25,16 @@ import tempfile
 
 _BQ = ['bq', '-q', '--format=json', '--headless']
 
-# Where the requestlogs tables live.
-_KHAN_PROJECT = ['--project_id', 'khanacademy.org:deductive-jet-827']
-# Where the streaming logs live.
-_KHAN_ACADEMY_PROJECT = ['--project_id', 'khan-academy']
-
 
 def _bq(project, command_list):
-    """`project` is one of _KHAN_PROJECT or _KHAN_ACADEMY_PROJECT."""
-    data = subprocess.check_output(_BQ + project + command_list)
+    """project is likely khan-academy or khanacademy.org:deductive-jet-827."""
+    data = subprocess.check_output(_BQ + ['--project_id', project] +
+                                   command_list)
     return json.loads(data)
 
 
 def _schema(project, table_name):
-    """`project` is one of _KHAN_PROJECT or _KHAN_ACADEMY_PROJECT."""
+    """project is likely khan-academy or khanacademy.org:deductive-jet-827."""
     data = _bq(project, ['show', table_name])
     return data['schema']['fields']
 
@@ -107,46 +104,75 @@ def _update_schema(project, table_name, new_schema):
                               ['update', '--schema=%s' % f.name, table_name])
 
 
-def main(streaming_table, dry_run=False):
-    print "Getting existing schema"
-    streaming_schema = _schema(_KHAN_ACADEMY_PROJECT, streaming_table)
+def _log_diff(new_schema, orig_schema):
+    """Print the diff between new_schema and old_schema to stdout."""
+    if orig_schema == new_schema:
+        logging.info("No differences, schema is unchanged.")
+        return
 
-    print "Getting schema that the java streaming job is expecting"
+    logging.info("New schema: %s",
+                 json.dumps(new_schema, sort_keys=True, indent=4))
+    # This diffing is taken from unittest.case.assertSequenceEqual
+    logging.info("Diff:")
+    logging.info("\n".join(difflib.ndiff(
+        pprint.pformat(orig_schema).splitlines(),
+        pprint.pformat(new_schema).splitlines())))
+
+
+def merge_and_update_schema(project, table, merge_with, dry_run):
+    """Update the schema of table to include columsn in merge_with.
+
+    After this is run, the table called `table` in project `project`
+    will include all the columns it used to have, plus the columns in
+    `merge_with` that it did not have before.
+    """
+    orig_schema = _schema(project, table)
+    new_schema = _merge_schemas(orig_schema, merge_with)
+    _delete_mode(new_schema)
+
+    _log_diff(new_schema, orig_schema)
+
+    if new_schema == orig_schema:
+        logging.info("Not updating schema, no changes found.")
+    elif dry_run:
+        logging.info("Not updating schema, dry-run specified.")
+    else:
+        logging.info("Updating schemas.")
+        _update_schema(project, table, new_schema)
+
+
+def main(project, table, dry_run=False):
+    logging.info("Getting schema that the java streaming job is expecting")
     schema_that_java_will_write = _schema_from_java()
 
-    print "Merging schemas"
-    new_streaming_schema = _merge_schemas(streaming_schema,
-                                          schema_that_java_will_write)
-    _delete_mode(new_streaming_schema)
+    logging.info("Merging and updating existing schema")
+    merge_and_update_schema(project, table, schema_that_java_will_write,
+                            dry_run)
 
-    # This diffing is taken from unittest.case.assertSequenceEqual
-    print ("New schema: %s"
-           % json.dumps(new_streaming_schema, sort_keys=True, indent=4))
-    print "Diff:\n"
-    print "\n".join(difflib.ndiff(
-        pprint.pformat(streaming_schema).splitlines(),
-        pprint.pformat(new_streaming_schema).splitlines()))
-
-    if streaming_schema == new_streaming_schema:
-        print "No differences, no need to update schema."
-    elif dry_run:
-        print "Not updating schema, dry-run specified."
-    else:
-        print "Updating schemas"
-        _update_schema(_KHAN_ACADEMY_PROJECT, streaming_table,
-                       new_streaming_schema)
-
-    print "DONE"
+    logging.info("DONE")
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dry-run', '-n', action='store_true',
-                        help="Show what we would do but don't do it.")
     parser.add_argument('-t', '--table',
-                        default='logs_streaming.logs_all_time',
-                        help="The streaming-table to update the schema for")
+                        default='khan-academy.logs_streaming.logs_all_time',
+                        help=("The streaming-table to update the schema for, "
+                              "in the form <project>.<dataset>.<table>. "
+                              "Default: %(default)s"))
+    parser.add_argument('-n', '--dry-run', action='store_true',
+                        help="Show what we would do but don't do it.")
+    parser.add_argument('-v', '--verbose', action='store_true',
+                        help="More verbose output.")
     args = parser.parse_args()
 
-    main(args.table, dry_run=args.dry_run)
+    try:
+        (project, dataset, table) = args.table.split('.')
+    except ValueError:
+        parser.error('--table must be of the form <project>.<dataset>.<table>.'
+                     ' Example projects are khanacademy.org:deductive-jet-827'
+                     ' and khan-academy.')
+
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+
+    main(project, '%s.%s' % (dataset, table), dry_run=args.dry_run)
