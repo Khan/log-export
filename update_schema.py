@@ -33,9 +33,12 @@ def _bq(project, command_list):
     return json.loads(data)
 
 
-def _schema(project, table_name):
+def schema(project, table_name):
     """project is likely khan-academy or khanacademy.org:deductive-jet-827."""
-    data = _bq(project, ['show', table_name])
+    try:
+        data = _bq(project, ['show', table_name])
+    except subprocess.CalledProcessError:    # probably 'table does not exist'
+        return []
     return data['schema']['fields']
 
 
@@ -107,7 +110,6 @@ def _update_schema(project, table_name, new_schema):
 def _log_diff(new_schema, orig_schema):
     """Print the diff between new_schema and old_schema to stdout."""
     if orig_schema == new_schema:
-        logging.info("No differences, schema is unchanged.")
         return
 
     logging.info("New schema: %s",
@@ -119,20 +121,23 @@ def _log_diff(new_schema, orig_schema):
         pprint.pformat(new_schema).splitlines())))
 
 
-def merge_and_update_schema(project, table, merge_with, dry_run):
+def merge_and_update_schema(project, table, merge_with, dry_run=False):
     """Update the schema of table to include columsn in merge_with.
 
     After this is run, the table called `table` in project `project`
     will include all the columns it used to have, plus the columns in
     `merge_with` that it did not have before.
     """
-    orig_schema = _schema(project, table)
+    orig_schema = schema(project, table)
     new_schema = _merge_schemas(orig_schema, merge_with)
     _delete_mode(new_schema)
 
     _log_diff(new_schema, orig_schema)
 
-    if new_schema == orig_schema:
+    if not orig_schema:
+        logging.info("Creating a new table, will create a new "
+                     "schema automatically.")
+    elif new_schema == orig_schema:
         logging.info("Not updating schema, no changes found.")
     elif dry_run:
         logging.info("Not updating schema, dry-run specified.")
