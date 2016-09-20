@@ -124,7 +124,7 @@ kalog_line AS (
     SELECT %(kalog_fields)s, thread_id
     FROM app_log
     -- We pick an arbitrary elog-field which is set for every request.
-    WHERE elog_url_route is not null
+    WHERE elog_country is not null
 ),
 
 -- One row for each request, but only for the app-log; we haven't
