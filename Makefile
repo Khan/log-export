@@ -17,7 +17,7 @@ run_locally:
 # subscription (and thus doesn't interfere with the production job).
 # This version does not exit and writes job logs to the console.
 deploy_test:
-	./update_schema.py -t logs_streaming_test.test_logs
+	./update_schema.py -t khan-academy.logs_streaming_test.test_logs
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
@@ -33,7 +33,7 @@ deploy_test:
 # subscription (and thus doesn't interfere with the production job).
 # This version exits as soon as the job has started and doesn't output job logs.
 deploy_test_nonblocking:
-	./update_schema.py -t logs_streaming_test.test_logs
+	./update_schema.py -t khan-academy.logs_streaming_test.test_logs
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
@@ -55,7 +55,7 @@ deploy_test_nonblocking:
 # running, a backlog of work will accumulate on the subscription and this
 # pipeline will begin processing that backlog.
 deploy_prod:
-	./update_schema.py -t logs_streaming.logs_all_time
+	./update_schema.py -t khan-academy.logs_streaming.logs_all_time
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
