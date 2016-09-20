@@ -135,13 +135,13 @@ bingo_participation_line AS (
     SELECT bingo_participation_events, thread_id
     FROM app_log
     WHERE bingo_participation_events[SAFE_OFFSET(0)] is not null AND
-          bingo_participation_events[SAFE_OFFSET(0)].bingo_id is not null AND
+          bingo_participation_events[SAFE_OFFSET(0)].bingo_id is not null
 ),
 bingo_conversion_line AS (
     SELECT bingo_conversion_events, thread_id
     FROM app_log
     WHERE bingo_conversion_events[SAFE_OFFSET(0)] is not null AND
-          bingo_conversion_events[SAFE_OFFSET(0)].bingo_id is not null AND
+          bingo_conversion_events[SAFE_OFFSET(0)].bingo_id is not null
 ),
 
 -- One row for each request, but only for the app-log; we haven't
@@ -256,7 +256,7 @@ def _next_hourly_table_time():
     return max(next_table_time, six_days_ago)
 
 
-def _create_hourly_table(start_time, dry_run=False):
+def _create_hourly_table(start_time, interactive=False, dry_run=False):
     """Copy an hour's worth of logs from streaming to a new table.
 
     This stores logs for all requests that *ended* between
@@ -329,11 +329,16 @@ def _create_hourly_table(start_time, dry_run=False):
     # fail due to a missing subquery table.
     _call_bq(['mk', '--expiration', str(50 * 60), '-t', vm_subtable])
 
+    _BQ_QUERY = ['query', '--allow_large_results', '--noflatten']
+    if not interactive:
+        _BQ_QUERY.append('--batch')
+    if dry_run:
+        _BQ_QUERY.append('--dry_run')
+
     # Create the temp-table that just holds the Managed VM loglines.
-    _call_bq(['query', '--batch', '--allow_large_results', '--noflatten',
-              '--destination_table', vm_subtable]
-             + (['--dry_run'] if dry_run else [])
-             + [_sanitize_query(_VM_SUBTABLE_QUERY % sql_dict)])
+    _call_bq(_BQ_QUERY +
+             ['--destination_table', vm_subtable,
+              _sanitize_query(_VM_SUBTABLE_QUERY % sql_dict)])
 
     # Create the hourly table in two steps.  (Ideally we'd just do one
     # step so creating the hourly table was atomic, but sadly we can't
@@ -342,17 +347,15 @@ def _create_hourly_table(start_time, dry_run=False):
     # The non-vm modules come first; they're very simple.
     logging.info("Creating a new hourly table: %s", hourly_table)
     logging.info("-- adding logs from non-vm modules")
-    _call_bq(['query', '--batch', '--allow_large_results', '--noflatten',
-              '--destination_table', hourly_table]
-             + (['--dry_run'] if dry_run else [])
-             + [_sanitize_query(_NON_VM_SUBTABLE_QUERY % sql_dict)])
+    _call_bq(_BQ_QUERY +
+             ['--destination_table', hourly_table,
+              _sanitize_query(_NON_VM_SUBTABLE_QUERY % sql_dict)])
 
     logging.info("-- adding logs from vm modules")
-    _call_bq(['query', '--batch', '--allow_large_results', '--noflatten',
-              '--append', '--nouse_legacy_sql',
-              '--destination_table', hourly_table]
-             + (['--dry_run'] if dry_run else [])
-             + [_sanitize_query(_VM_MODULES_QUERY % sql_dict)])
+    _call_bq(_BQ_QUERY +
+             ['--append', '--nouse_legacy_sql',
+              '--destination_table', hourly_table,
+              _sanitize_query(_VM_MODULES_QUERY % sql_dict)])
 
     # Call update_schema to make sure that the daily table has all the
     # columns the hourly table does, in case some just got added.
@@ -369,7 +372,7 @@ def _create_hourly_table(start_time, dry_run=False):
              dry_run=dry_run)
 
 
-def main(dry_run):
+def main(interactive, dry_run):
     """Populate any hourly and daily tables that still need it."""
     now = datetime.datetime.utcnow()
     start_of_this_hour = datetime.datetime(now.year, now.month, now.day,
@@ -380,13 +383,15 @@ def main(dry_run):
     while next_hourly_table_time < start_of_this_hour:
         logging.info("Processing logs at %s (UTC)",
                      next_hourly_table_time.ctime())
-        _create_hourly_table(next_hourly_table_time, dry_run)
+        _create_hourly_table(next_hourly_table_time, interactive, dry_run)
         next_hourly_table_time += datetime.timedelta(hours=1)
 
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--interactive', action='store_true',
+                        help="Use interactive mode instead of batch (faster)")
     parser.add_argument('-n', '--dry-run', action='store_true',
                         help="Show what we would do but don't do it.")
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -395,4 +400,4 @@ if __name__ == '__main__':
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
 
-    main(args.dry_run)
+    main(args.interactive, args.dry_run)
