@@ -267,8 +267,7 @@ def _create_hourly_table(start_time, dry_run=False):
     _call_bq(['mk', '--expiration', str(50 * 60), '-t', vm_subtable])
 
     # Create the temp-table that just holds the Managed VM loglines.
-    # TODO(csilvers): add `--batch` to all of these.
-    _call_bq(['query', '--allow_large_results', '--noflatten',
+    _call_bq(['query', '--batch', '--allow_large_results', '--noflatten',
               '--destination_table', vm_subtable]
              + (['--dry_run'] if dry_run else [])
              + [_sanitize_query(_VM_SUBTABLE_QUERY % sql_dict)])
@@ -280,14 +279,15 @@ def _create_hourly_table(start_time, dry_run=False):
     # The non-vm modules come first; they're very simple.
     logging.info("Creating a new hourly table: %s", hourly_table)
     logging.info("-- adding logs from non-vm modules")
-    _call_bq(['query', '--allow_large_results', '--noflatten',
+    _call_bq(['query', '--batch', '--allow_large_results', '--noflatten',
               '--destination_table', hourly_table]
              + (['--dry_run'] if dry_run else [])
              + [_sanitize_query(_NON_VM_SUBTABLE_QUERY % sql_dict)])
 
     logging.info("-- adding logs from vm modules")
-    _call_bq(['query', '--append', '--allow_large_results', '--noflatten',
-              '--nouse_legacy_sql', '--destination_table', hourly_table]
+    _call_bq(['query', '--batch', '--allow_large_results', '--noflatten',
+              '--append', '--nouse_legacy_sql',
+              '--destination_table', hourly_table]
              + (['--dry_run'] if dry_run else [])
              + [_sanitize_query(_VM_MODULES_QUERY % sql_dict)])
 
