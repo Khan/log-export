@@ -57,7 +57,7 @@ _DAILY_DATASET = 'logs_new'
 #       be about 10 minutes before start_time, so we can collect app-logs
 #       associated with a request that ended after start_time.
 #    end_ms: the time_t to stop reading logs from, in ms.  This needs to be
-#       15 minutes later than end_time to get all the records, since for
+#       >15 minutes later than end_time to get all the records, since for
 #       non-recent records the streaming output is chunked at 15-minute
 #       intervals.  See
 #       https://groups.google.com/a/khanacademy.org/forum/#!topic/infrastructure-team/Y2qG9SH5S3o
@@ -177,6 +177,30 @@ def _call_bq(cmd_and_args, **kwargs):
         logging.debug("bq command ran in %.2f seconds" % elapsed_time)
 
 
+def _streaming_logs_are_up_to_date(end_time, end_ms):
+    """Return True if streaming logs have an entry after end_time.
+
+    Arguments:
+        end_time: the time we want the logs to be caught up to
+        end_ms: the end-time we will put on the table decorator
+            when doing the sql query.  That is, we will do
+               FROM [logs_streaming.logs_all_time@<something>-<end_ms>]
+            This way we can verify that the streaming logs will
+            look 'up to date' for the same exact query we'll be
+            doing on them later.
+    """
+    # We give a few seconds' slack in case there's a long period of time
+    # with no queries.
+    start_ms = (end_time - 10) * 1000
+    # The second selected field is just to help with debugging.
+    query = ('SELECT MAX(end_time) >= %s, INTEGER(MAX(end_time)) '
+             'FROM [khan-academy:logs_streaming.logs_all_time@%s-%s]'
+             % (end_time, start_ms, end_ms))
+    r = subprocess.check_output(['bq', '-q', '--headless', '--format', 'csv',
+                                 'query', query])
+    return 'true' in r
+
+
 def _next_hourly_table_time():
     """The smallest datetime we don't have a table for in logs_hourly.
 
@@ -244,7 +268,7 @@ def _create_hourly_table(start_time, dry_run=False):
         'start_time': start_time_t,
         'end_time': start_time_t + 3600,
         'start_ms': (start_time_t - 10 * 60) * 1000,
-        'end_ms': (start_time_t + 3600 + 15 * 60) * 1000,
+        'end_ms': (start_time_t + 3600 + 16 * 60) * 1000,
         'vm_filtered_temptable': vm_subtable,
         'reqlog_fields': ', '.join(reqlog_fields),
         'kalog_fields': ', '.join(kalog_fields),
@@ -260,6 +284,19 @@ def _create_hourly_table(start_time, dry_run=False):
         return
     except subprocess.CalledProcessError:    # means 'table does not exist'
         pass
+
+
+    # Wait until the streaming logs are up to date.
+    logging.info("Making sure streaming logs are up to date.")
+    for i in xrange(1, 15):
+        if _streaming_logs_are_up_to_date(sql_dict['end_time'],
+                                          sql_dict['end_ms']):
+            break
+        wait = i ** 1.5   # friendly backoff, between linear and quadratic
+        logging.warning("Streaming logs not up to date, waiting %ds..." % wait)
+        time.sleep(wait)
+    else:
+        logging.fatal("Streaming logs never got up to date.")
 
     # We need to `mk` our temp-table so we can give it an expiry.
     # We do this even in dry-run mode so the hourly table doesn't
