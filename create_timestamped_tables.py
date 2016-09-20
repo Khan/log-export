@@ -288,11 +288,11 @@ def _create_hourly_table(start_time, dry_run=False):
 
     # Wait until the streaming logs are up to date.
     logging.info("Making sure streaming logs are up to date.")
-    for i in xrange(1, 15):
+    for i in xrange(10):
         if _streaming_logs_are_up_to_date(sql_dict['end_time'],
                                           sql_dict['end_ms']):
             break
-        wait = i ** 1.5   # friendly backoff, between linear and quadratic
+        wait = 60 * (1.5 ** i)   # friendly exponential backoff
         logging.warning("Streaming logs not up to date, waiting %ds..." % wait)
         time.sleep(wait)
     else:
