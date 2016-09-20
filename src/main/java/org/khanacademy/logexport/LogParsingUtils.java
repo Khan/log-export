@@ -60,4 +60,13 @@ public class LogParsingUtils {
             return index;
         }
     }
+
+
+    /**
+     * The proto payload has a `moduleId` field that isn't set for the default service, set it to
+     * "default" so as to match `logs_hourly`.
+     */
+    public static @Nullable String parseModuleId(Object module_id) {
+        return (module_id != null) ? (String) module_id : "default";
+    }
 }

@@ -37,7 +37,7 @@ public class StandardLogFieldParser {
             logField("task_queue_name", Type.STRING, "taskQueueName"),
             logField("task_name", Type.STRING, "taskName"),
             logField("instance_key", Type.STRING, "instanceId"),
-            logField("module_id", Type.STRING, "moduleId"),
+            logField("module_id", Type.STRING, "moduleId", LogParsingUtils::parseModuleId),
             logField("version_id", Type.STRING, "versionId"),
             logField("request_id", Type.STRING, "requestId"),
             logField("thread_id", Type.STRING, "threadId"),
