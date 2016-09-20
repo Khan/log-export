@@ -127,6 +127,23 @@ kalog_line AS (
     WHERE elog_country is not null
 ),
 
+-- And similar for the bigbingo fields.  We hard-code these.
+-- TODO(csilvers): get rid of all these special lines (including
+-- kalog_line entirely, maybe when we can use legacy sql with
+-- table decorators so it doesn't insert a bunch of (null, null) records.
+bingo_participation_line AS (
+    SELECT bingo_participation_events, thread_id
+    FROM app_log
+    WHERE bingo_participation_events[SAFE_OFFSET(0)] is not null AND
+          bingo_participation_events[SAFE_OFFSET(0)].bingo_id is not null AND
+),
+bingo_conversion_line AS (
+    SELECT bingo_conversion_events, thread_id
+    FROM app_log
+    WHERE bingo_conversion_events[SAFE_OFFSET(0)] is not null AND
+          bingo_conversion_events[SAFE_OFFSET(0)].bingo_id is not null AND
+),
+
 -- One row for each request, but only for the app-log; we haven't
 -- merged with the request-log data yet.  This merges together a bunch
 -- of `app_log` lines with the same thread_id, and also all the kalog
@@ -134,11 +151,17 @@ kalog_line AS (
 joined_applog_lines AS (
     SELECT ARRAY_CONCAT_AGG(app_log.app_logs) as app_logs,
            %(concatted_kalog_fields)s,
+           ANY_VALUE(bingo_participation_line.bingo_participation_events) as bingo_participation_events,
+           ANY_VALUE(bingo_conversion_line.bingo_conversion_events) as bingo_conversion_events,
            link_line.request_id as request_id
     FROM link_line
     LEFT OUTER JOIN app_log
     USING (thread_id)
     LEFT OUTER JOIN kalog_line
+    USING (thread_id)
+    LEFT OUTER JOIN bingo_participation_line
+    USING (thread_id)
+    LEFT OUTER JOIN bingo_conversion_line
     USING (thread_id)
     GROUP BY link_line.request_id
 )
@@ -258,10 +281,13 @@ def _create_hourly_table(start_time, dry_run=False):
     applog_fields = ['app_logs']
     # These are fields that we derive from the 'KALOG' app-log logline.
     kalog_fields = sorted(f['name'] for f in streaming_schema
-                           if f['name'].startswith(('elog_', 'bingo_')))
+                           if f['name'].startswith('elog_'))
+    bingo_fields = sorted(f['name'] for f in streaming_schema
+                           if f['name'].startswith('bingo_'))
     # These are fields that we take from the request-log.
     reqlog_fields = sorted(f['name'] for f in streaming_schema
-                           if f['name'] not in applog_fields + kalog_fields)
+                           if f['name'] not in (applog_fields + kalog_fields +
+                                                bingo_fields))
 
     start_time_t = calendar.timegm(start_time.timetuple())
     sql_dict = {
