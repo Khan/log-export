@@ -413,9 +413,12 @@ def main(interactive, dry_run):
     # was created but crashed before updating the daily table.
     next_hourly_table_time = _next_hourly_table_time()
     while next_hourly_table_time < start_of_this_hour:
-        logging.info("Processing logs at %s (UTC)",
-                     next_hourly_table_time.ctime())
+        printable_time = next_hourly_table_time.ctime()
+
+        logging.info("Processing logs at %s (UTC)", printable_time)
         _create_hourly_table(next_hourly_table_time, interactive, dry_run)
+        logging.info("DONE processing logs at %s (UTC)", printable_time)
+
         next_hourly_table_time += datetime.timedelta(hours=1)
 
 
