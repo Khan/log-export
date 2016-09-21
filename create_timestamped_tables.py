@@ -32,6 +32,7 @@ import os
 import random
 import re
 import subprocess
+import sys
 import time
 
 import update_schema
@@ -372,6 +373,43 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
              dry_run=dry_run)
 
 
+def setup_logging(verbose):
+    """Log DEBUG/INFO to stdout, WARNING/ERROR to stderr.
+
+    The reason we care is this is run from cron, which will send stdout
+    to a logfile and stderr out as mail.
+
+    This is taken from
+    http://stackoverflow.com/questions/2302315/how-can-info-and-debug-logging-message-be-sent-to-stdout-and-higher-level-messag
+    """
+    class LessThanFilter(logging.Filter):
+        def __init__(self, exclusive_maximum, name=""):
+            super(LessThanFilter, self).__init__(name)
+            self.max_level = exclusive_maximum
+
+        def filter(self, record):
+            #non-zero return means we log this message
+            return 1 if record.levelno < self.max_level else 0
+
+    logger = logging.getLogger()
+    # Have to set the root logger level, it defaults to logging.WARNING.
+    logger.setLevel(logging.NOTSET)
+
+    logs_format = '[%(asctime)s %(levelname)s] %(message)s'
+    formatter = logging.Formatter(logs_format)
+
+    logging_handler_out = logging.StreamHandler(sys.stdout)
+    logging_handler_out.setLevel(logging.DEBUG)
+    logging_handler_out.addFilter(LessThanFilter(logging.WARNING))
+    logging_handler_out.setFormatter(formatter)
+    logger.addHandler(logging_handler_out)
+
+    logging_handler_err = logging.StreamHandler(sys.stderr)
+    logging_handler_err.setLevel(logging.WARNING)
+    logging_handler_err.setFormatter(formatter)
+    logger.addHandler(logging_handler_err)
+
+
 def main(interactive, dry_run):
     """Populate any hourly and daily tables that still need it."""
     now = datetime.datetime.utcnow()
@@ -398,6 +436,6 @@ if __name__ == '__main__':
                         help="More verbose output.")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    setup_logging(args.verbose)
 
     main(args.interactive, args.dry_run)
