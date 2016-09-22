@@ -31,6 +31,7 @@ import logging
 import os
 import random
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -312,7 +313,6 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
     except subprocess.CalledProcessError:    # means 'table does not exist'
         pass
 
-
     # Wait until the streaming logs are up to date.
     logging.info("Making sure streaming logs are up to date.")
     for i in xrange(10):
@@ -404,6 +404,23 @@ def setup_logging(verbose):
     logger.addHandler(logging_handler_err)
 
 
+def _remove_tables_at_time(table_time):
+    table = table_time.strftime(_HOURLY_DATASET + '.requestlogs_%Y%m%d_%H')
+    try:
+        _call_bq(['rm', table])
+    except subprocess.CalledProcessError:
+        # It didn't exist or we couldn't delete it.
+        pass
+
+
+def _signal_handler(signal_number, _stackframe):
+    signals_to_names = dict((getattr(signal, n), n)
+        for n in dir(signal) if n.startswith('SIG') and '_' not in n)
+    
+    # Throw an exception from the signal_handler to hit the catch clause.
+    raise RuntimeError("Caught signal %s." % signals_to_names[signal_number])
+
+
 def main(interactive, dry_run):
     """Populate any hourly and daily tables that still need it."""
     now = datetime.datetime.utcnow()
@@ -416,7 +433,21 @@ def main(interactive, dry_run):
         printable_time = next_hourly_table_time.ctime()
 
         logging.info("Processing logs at %s (UTC)", printable_time)
-        _create_hourly_table(next_hourly_table_time, interactive, dry_run)
+        try:
+            _create_hourly_table(next_hourly_table_time, interactive, dry_run)
+        except Exception as e:
+            start_time = time.time()
+            logging.error("Error creating tables for "
+                "%s, deleting it to be safe: %s" % (printable_time, e))
+            _remove_tables_at_time(next_hourly_table_time)
+            
+            the_rest_of_four_minutes = start_time + (4 * 60) - time.time()
+            if the_rest_of_four_minutes > 0:
+                logging.info("Waiting %s minutes to try and let daily_table"
+                    " finish updating.", the_rest_of_four_minutes / 60)
+                time.sleep(the_rest_of_four_minutes)
+            return
+
         logging.info("DONE processing logs at %s (UTC)", printable_time)
 
         next_hourly_table_time += datetime.timedelta(hours=1)
@@ -434,5 +465,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     setup_logging(args.verbose)
+
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
 
     main(args.interactive, args.dry_run)
