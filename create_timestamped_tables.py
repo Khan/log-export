@@ -176,6 +176,10 @@ USING (request_id)
 """
 
 
+def _hourly_table_name(start_time):
+    return start_time.strftime(_HOURLY_DATASET + '.requestlogs_%Y%m%d_%H')
+
+
 def _sanitize_query(sql_query):
     """Remove newlines and comments from the sql query, for the commandline."""
     return re.sub(r'--.*', '', sql_query).replace('\n', ' ')
@@ -205,6 +209,13 @@ def _call_bq(cmd_and_args, **kwargs):
 def _streaming_logs_are_up_to_date(end_time, end_ms):
     """Return True if streaming logs have an entry after end_time.
 
+    TODO(csilvers): this doesn't seem to be good enough!  We've seen
+    cases where there are many loglines from 12:59, say, but tens of
+    thousands of loglines missing from 12:55 (when we compared this
+    output to the log_to_bigquery mapreduced output).  We're not sure
+    how this might have happened.  For now, we have the additional
+    _hourly_logs_seem_complete() check to help us with that case.
+
     Arguments:
         end_time: the time we want the logs to be caught up to
         end_ms: the end-time we will put on the table decorator
@@ -224,6 +235,63 @@ def _streaming_logs_are_up_to_date(end_time, end_ms):
     r = subprocess.check_output(['bq', '-q', '--headless', '--format', 'csv',
                                  'query', query])
     return 'true' in r
+
+
+def _hourly_logs_seem_complete(start_time):
+    """Return True if the given table seems to have all the data it ought.
+
+    We were seeing some problems, in our QA testing, where we compared
+    the hourly logs created by this script with ones created by a
+    separate process (the logs_to_bigquery mapreduce).  We noticed
+    that this log could be missing hundreds of thousands of lines.
+    They all -- almost all -- were from the last 5 minutes of the log.
+    (This log had plenty of loglines in the last 5 minutes, just not
+    all of them.)  We don't understand really how this could happen,
+    but we can test against it and fail.  In our experience, trying
+    the query again an hour later typically fixes it.
+    """
+    # In our experience, after a few hours the streaming logs have all
+    # the data, so don't even both to check this if the logs are from
+    # more than, say, 4-5 hours ago.
+    if start_time + datetime.timedelta(hours=5) < datetime.datetime.utcnow():
+        return True
+
+    hourly_log_table = _hourly_table_name(start_time)
+    query = """\
+SELECT "old" as which, count(1) as count
+FROM %(table)s
+WHERE end_time_timestamp BETWEEN
+      TIMESTAMP("%(YYYYMMDD_HH)s:50:00 UTC") AND
+      TIMESTAMP("%(YYYYMMDD_HH)s:54:59 UTC")
+UNION ALL
+SELECT "new" as which, count(1) as count
+FROM %(table)s
+WHERE end_time_timestamp BETWEEN
+      TIMESTAMP("%(YYYYMMDD_HH)s:55:00 UTC") AND
+      TIMESTAMP("%(YYYYMMDD_HH)s:59:59 UTC")
+""" % {
+    'table': hourly_log_table,
+    'YYYYMMDD_HH': start_time.strftime("%Y-%m-%d %H")
+}
+
+    results = subprocess.check_output(
+        ['bq', '-q', '--headless', '--format', 'json',
+         '--project_id', _PROJECT,
+         'query', '--nouse_legacy_sql', query])
+
+    old_count = next(r['count'] for r in results if r['which'] == 'old')
+    new_count = next(r['count'] for r in results if r['which'] == 'new')
+    difference = (new_count - old_count) * 100.0 / old_count
+
+    # We expect some difference, but if it's more than a few percent
+    # that indicates a problem.
+    if difference >= 5:
+        logging.error("Error reading from streaming logs: The last 5 "
+                      "minutes of the logs have %.2f%% fewer "
+                      "loglines than the preceding 5 minutes",
+                      hourly_log_table, difference)
+        return False
+    return True
 
 
 def _next_hourly_table_time():
@@ -270,8 +338,7 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
     This raises an error if the table already exists.
     """
     daily_table = start_time.strftime(_DAILY_DATASET + '.requestlogs_%Y%m%d')
-    hourly_table = start_time.strftime(_HOURLY_DATASET +
-                                       '.requestlogs_%Y%m%d_%H')
+    hourly_table = _hourly_table_name(start_time)
     # We use a random number to avoid collisions if we try to process the
     # same hour multiple times.
     vm_subtable = start_time.strftime(_HOURLY_DATASET + '.subquery_%Y%m%d_%H' +
@@ -358,6 +425,12 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
               '--destination_table', hourly_table,
               _sanitize_query(_VM_MODULES_QUERY % sql_dict)])
 
+    # Sanity check on the hourly logs.
+    if not _hourly_logs_seem_complete(start_time):
+        logging.error("Deleting %s", hourly_table)
+        _remove_tables_at_time(start_time)
+        raise RuntimeError("%s seems to be incomplete" % hourly_table)
+
     # Call update_schema to make sure that the daily table has all the
     # columns the hourly table does, in case some just got added.
     # Otherwise the `cp` command below will fail.  (This doesn't work
@@ -405,7 +478,7 @@ def setup_logging(verbose):
 
 
 def _remove_tables_at_time(table_time):
-    table = table_time.strftime(_HOURLY_DATASET + '.requestlogs_%Y%m%d_%H')
+    table = _hourly_table_name(table_time)
     try:
         _call_bq(['rm', table])
     except subprocess.CalledProcessError:
@@ -416,7 +489,7 @@ def _remove_tables_at_time(table_time):
 def _signal_handler(signal_number, _stackframe):
     signals_to_names = dict((getattr(signal, n), n)
         for n in dir(signal) if n.startswith('SIG') and '_' not in n)
-    
+
     # Throw an exception from the signal_handler to hit the catch clause.
     raise RuntimeError("Caught signal %s." % signals_to_names[signal_number])
 
@@ -440,7 +513,7 @@ def main(interactive, dry_run):
             logging.error("Error creating tables for "
                 "%s, deleting it to be safe: %s" % (printable_time, e))
             _remove_tables_at_time(next_hourly_table_time)
-            
+
             the_rest_of_four_minutes = start_time + (4 * 60) - time.time()
             if the_rest_of_four_minutes > 0:
                 logging.info("Waiting %s minutes to try and let daily_table"
