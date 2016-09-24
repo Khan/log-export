@@ -225,6 +225,11 @@ def _streaming_logs_are_up_to_date(end_time, end_ms):
             look 'up to date' for the same exact query we'll be
             doing on them later.
     """
+    # Around midnight, and maybe other times, there seems to be a
+    # weird thing where it stops right at 11:59:59 for a few minutes
+    # longer than normal, so I say it's ok if we have an entry at
+    # the 59:59 as well.
+    end_time -= 1
     # We give a few seconds' slack in case there's a long period of time
     # with no queries.
     start_ms = (end_time - 10) * 1000
