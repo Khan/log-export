@@ -480,7 +480,7 @@ def setup_logging(verbose):
 def _remove_tables_at_time(table_time):
     table = _hourly_table_name(table_time)
     try:
-        _call_bq(['rm', table])
+        _call_bq(['rm', '-t', '-f', table])
     except subprocess.CalledProcessError:
         # It didn't exist or we couldn't delete it.
         pass
