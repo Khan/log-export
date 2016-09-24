@@ -510,7 +510,7 @@ def main(interactive, dry_run):
             _create_hourly_table(next_hourly_table_time, interactive, dry_run)
         except Exception as e:
             start_time = time.time()
-            logging.error("Error creating tables for "
+            logging.exception("Error creating tables for "
                 "%s, deleting it to be safe: %s" % (printable_time, e))
             _remove_tables_at_time(next_hourly_table_time)
 
