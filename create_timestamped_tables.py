@@ -278,6 +278,7 @@ WHERE end_time_timestamp BETWEEN
         ['bq', '-q', '--headless', '--format', 'json',
          '--project_id', _PROJECT,
          'query', '--nouse_legacy_sql', query])
+    results = json.loads(results)
 
     old_count = next(r['count'] for r in results if r['which'] == 'old')
     new_count = next(r['count'] for r in results if r['which'] == 'new')
