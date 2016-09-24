@@ -234,7 +234,10 @@ def _streaming_logs_are_up_to_date(end_time, end_ms):
              % (end_time, start_ms, end_ms))
     r = subprocess.check_output(['bq', '-q', '--headless', '--format', 'csv',
                                  'query', query])
-    return 'true' in r
+    if 'true' in r:
+        return True
+    logging.warning("Logs not up to date: '%s' returned '%s'" % (query, r))
+    return False
 
 
 def _hourly_logs_seem_complete(start_time):
