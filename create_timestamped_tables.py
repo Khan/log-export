@@ -516,7 +516,7 @@ def main(interactive, dry_run):
 
             the_rest_of_four_minutes = start_time + (4 * 60) - time.time()
             if the_rest_of_four_minutes > 0:
-                logging.info("Waiting %s minutes to try and let daily_table"
+                logging.info("Waiting %.2f minutes to try and let daily_table"
                     " finish updating.", the_rest_of_four_minutes / 60)
                 time.sleep(the_rest_of_four_minutes)
             return
