@@ -261,7 +261,7 @@ def _table_decorator_end_time(end_time):
     end_ms = (end_time + 16 * 60) * 1000
 
     # Things are straightforward until we have to wait until the future...
-    while end_ms < _now():
+    while end_ms < _now() * 1000:
         if _logs_are_up_to_date(start_ms, end_ms, end_time):
             return end_ms
         logging.warning("Reading logs %d seconds past end-time isn't enough, "
