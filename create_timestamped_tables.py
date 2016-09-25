@@ -220,7 +220,11 @@ def _logs_are_up_to_date(start_ms, end_ms, end_time):
              % (end_time, start_ms, end_ms))
     r = subprocess.check_output(['bq', '-q', '--headless', '--format', 'csv',
                                  'query', query])
-    return 'true' in r
+    if 'true' in r:
+        return True
+    logging.warning("Insufficient table decorator values: '%s' returned '%s'",
+                    query, r)
+    return False
 
 
 def _table_decorator_end_time(end_time):
