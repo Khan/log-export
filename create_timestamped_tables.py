@@ -325,8 +325,8 @@ WHERE end_time_timestamp BETWEEN
          'query', '--nouse_legacy_sql', query])
     results = json.loads(results)
 
-    old_count = next(r['count'] for r in results if r['which'] == 'old')
-    new_count = next(r['count'] for r in results if r['which'] == 'new')
+    old_count = int(next(r['count'] for r in results if r['which'] == 'old'))
+    new_count = int(next(r['count'] for r in results if r['which'] == 'new'))
     difference = (new_count - old_count) * 100.0 / old_count
 
     # We expect some difference, but if it's more than a few percent
