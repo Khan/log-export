@@ -180,7 +180,7 @@ USING (request_id)
 
 def _now():
     """Now, as a time_t."""
-    return calendar.timegm(datetime.datetime.now().timetuple())
+    return calendar.timegm(datetime.datetime.utcnow().timetuple())
 
 
 def _hourly_table_name(start_time):
