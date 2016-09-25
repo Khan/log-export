@@ -59,9 +59,9 @@ _DAILY_DATASET = 'logs_new'
 #       be about 10 minutes before start_time, so we can collect app-logs
 #       associated with a request that ended after start_time.
 #    end_ms: the time_t to stop reading logs from, in ms.  This needs to be
-#       >15 minutes later than end_time to get all the records, since for
-#       non-recent records the streaming output is chunked at 15-minute
-#       intervals.  See
+#       >15 minutes later than end_time to get all the records, and sometimes
+#       longer, since for non-recent records the streaming output is chunked
+#       at 15-minute intervals.  See
 #       https://groups.google.com/a/khanacademy.org/forum/#!topic/infrastructure-team/Y2qG9SH5S3o
 # Note that our start_time and end_time and only kinda related to the
 # bigquery columns entitled 'start_time' and 'end_time'.  So confusing!
@@ -153,8 +153,10 @@ bingo_conversion_line AS (
 joined_applog_lines AS (
     SELECT ARRAY_CONCAT_AGG(app_log.app_logs) as app_logs,
            %(concatted_kalog_fields)s,
-           ANY_VALUE(bingo_participation_line.bingo_participation_events) as bingo_participation_events,
-           ANY_VALUE(bingo_conversion_line.bingo_conversion_events) as bingo_conversion_events,
+           ANY_VALUE(bingo_participation_line.bingo_participation_events)
+               as bingo_participation_events,
+           ANY_VALUE(bingo_conversion_line.bingo_conversion_events)
+               as bingo_conversion_events,
            link_line.request_id as request_id
     FROM link_line
     LEFT OUTER JOIN app_log
@@ -174,6 +176,11 @@ FROM request
 LEFT OUTER JOIN joined_applog_lines
 USING (request_id)
 """
+
+
+def _now():
+    """Now, as a time_t."""
+    return calendar.timegm(datetime.datetime.now().timetuple())
 
 
 def _hourly_table_name(start_time):
@@ -206,43 +213,69 @@ def _call_bq(cmd_and_args, **kwargs):
         logging.debug("bq command ran in %.2f seconds" % elapsed_time)
 
 
-def _streaming_logs_are_up_to_date(end_time, end_ms):
-    """Return True if streaming logs have an entry after end_time.
-
-    TODO(csilvers): this doesn't seem to be good enough!  We've seen
-    cases where there are many loglines from 12:59, say, but tens of
-    thousands of loglines missing from 12:55 (when we compared this
-    output to the log_to_bigquery mapreduced output).  We're not sure
-    how this might have happened.  For now, we have the additional
-    _hourly_logs_seem_complete() check to help us with that case.
-
-    Arguments:
-        end_time: the time we want the logs to be caught up to
-        end_ms: the end-time we will put on the table decorator
-            when doing the sql query.  That is, we will do
-               FROM [logs_streaming.logs_all_time@<something>-<end_ms>]
-            This way we can verify that the streaming logs will
-            look 'up to date' for the same exact query we'll be
-            doing on them later.
-    """
-    # Around midnight, and maybe other times, there seems to be a
-    # weird thing where it stops right at 11:59:59 for a few minutes
-    # longer than normal, so I say it's ok if we have an entry at
-    # the 59:59 as well.
-    end_time -= 1
-    # We give a few seconds' slack in case there's a long period of time
-    # with no queries.
-    start_ms = (end_time - 10) * 1000
+def _logs_are_up_to_date(start_ms, end_ms, end_time):
     # The second selected field is just to help with debugging.
     query = ('SELECT MAX(end_time) >= %s, INTEGER(MAX(end_time)) '
              'FROM [khan-academy:logs_streaming.logs_all_time@%s-%s]'
              % (end_time, start_ms, end_ms))
     r = subprocess.check_output(['bq', '-q', '--headless', '--format', 'csv',
                                  'query', query])
-    if 'true' in r:
-        return True
-    logging.warning("Logs not up to date: '%s' returned '%s'" % (query, r))
-    return False
+    return 'true' in r
+
+
+def _table_decorator_end_time(end_time):
+    """Return a time-in-ms so a table decorator ending then includes end_time.
+
+    For non-recent records, the streaming output seems to be chunked
+    in some way.  (Colin suspects that there are actually two queues
+    for streaming data, one for very recent stuff and one for less
+    recent, and sometimes the latter gets behind.)  See
+        https://groups.google.com/a/khanacademy.org/forum/#!topic/infrastructure-team/Y2qG9SH5S3o
+
+    Thus, while in theory a query over logs_streaming@x000-y000
+    will return all results between time x and time y, in practice
+    it often returns results between time x and about 15 minutes
+    before time y.  So if you want to get all results between time
+    x and time y, your table decorator (the `@x000-y000` part)
+    needs to end about 15 minutes after y.
+
+    In our experience, 15 minutes works well most of the time.
+    However, around midnight and noon, even that's not long enough.
+    Shrug.  This function figures out the right table decorator
+    end time, even if it's in the future (it waits in that case :-) )
+
+    Arguments:
+        end_time: the time_t we want the logs to be caught up to
+    """
+    # We give a few seconds' slack in case there's a long period of time
+    # with no queries.
+    start_ms = (end_time - 10) * 1000
+
+    # We'll start by checking 16 minutes later.
+    # TODO(csilvers): check if this is overkill, maybe end_time plus
+    # one minute (or plus 1 second) works well most of the time.
+    end_ms = (end_time + 16 * 60) * 1000
+
+    # Things are straightforward until we have to wait until the future...
+    while end_ms < _now():
+        if _logs_are_up_to_date(start_ms, end_ms, end_time):
+            return end_ms
+        logging.warning("Reading logs %d seconds past end-time isn't enough, "
+                        "trying a later time", (end_ms / 1000 - end_time))
+        end_ms += (5 * 60) * 1000
+
+    # If we get here, even having end_ms be the present isn't enough.
+    # We will just have to wait a while for more logs to come in.
+    logging.info("Waiting for streaming logs to get up to date.")
+    for i in xrange(10):
+        end_ms = _now() * 1000
+        if _logs_are_up_to_date(start_ms, end_ms, end_time):
+            return end_ms
+        wait = 60 * (1.5 ** i)   # friendly exponential backoff
+        logging.warning("Streaming logs not up to date, waiting %ds..." % wait)
+        time.sleep(wait)
+
+    logging.fatal("Streaming logs never got up to date.")
 
 
 def _hourly_logs_seem_complete(start_time):
@@ -368,11 +401,12 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
                                                 bingo_fields))
 
     start_time_t = calendar.timegm(start_time.timetuple())
+    end_time_t = start_time_t + 3600
     sql_dict = {
         'start_time': start_time_t,
-        'end_time': start_time_t + 3600,
+        'end_time': end_time_t,
         'start_ms': (start_time_t - 10 * 60) * 1000,
-        'end_ms': (start_time_t + 3600 + 16 * 60) * 1000,
+        'end_ms': _table_decorator_end_time(end_time_t),
         'vm_filtered_temptable': vm_subtable,
         'reqlog_fields': ', '.join(reqlog_fields),
         'kalog_fields': ', '.join(kalog_fields),
@@ -388,18 +422,6 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
         return
     except subprocess.CalledProcessError:    # means 'table does not exist'
         pass
-
-    # Wait until the streaming logs are up to date.
-    logging.info("Making sure streaming logs are up to date.")
-    for i in xrange(10):
-        if _streaming_logs_are_up_to_date(sql_dict['end_time'],
-                                          sql_dict['end_ms']):
-            break
-        wait = 60 * (1.5 ** i)   # friendly exponential backoff
-        logging.warning("Streaming logs not up to date, waiting %ds..." % wait)
-        time.sleep(wait)
-    else:
-        logging.fatal("Streaming logs never got up to date.")
 
     # We need to `mk` our temp-table so we can give it an expiry.
     # We do this even in dry-run mode so the hourly table doesn't
