@@ -333,7 +333,7 @@ WHERE end_time_timestamp BETWEEN
     # that indicates a problem.
     if difference >= 5:
         logging.error("Error reading from streaming logs: The last 5 "
-                      "minutes of the logs have %.2f%% fewer "
+                      "minutes of %s have %.2f%% fewer "
                       "loglines than the preceding 5 minutes",
                       hourly_log_table, difference)
         return False
