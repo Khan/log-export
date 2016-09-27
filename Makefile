@@ -59,7 +59,7 @@ deploy_prod:
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
-            --numWorkers=4 \
+            --numWorkers=5 \
             --project=$(PROJECT_NAME) \
             --stagingLocation=$(STAGING_LOCATION) \
             --workerMachineType=$(MACHINE_TYPE) \
