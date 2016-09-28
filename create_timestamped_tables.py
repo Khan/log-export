@@ -331,7 +331,7 @@ ORDER BY interval
                 "preceding 5 minutes:\n%s",
                 hourly_log_table, results[i]['interval'], -difference,
                 '\n'.join(json.dumps(e) for e in results))
-        return False
+            return False
     return True
 
 
