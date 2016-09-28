@@ -288,54 +288,49 @@ def _hourly_logs_seem_complete(start_time):
     We were seeing some problems, in our QA testing, where we compared
     the hourly logs created by this script with ones created by a
     separate process (the logs_to_bigquery mapreduce).  We noticed
-    that this log could be missing hundreds of thousands of lines.
-    They all -- almost all -- were from the last 5 minutes of the log.
-    (This log had plenty of loglines in the last 5 minutes, just not
-    all of them.)  We don't understand really how this could happen,
-    but we can test against it and fail.  In our experience, trying
-    the query again an hour later typically fixes it.
+    that this log could be missing hundreds of thousands of lines.  We
+    don't understand really how this could happen, but we can test
+    against it and fail.  In our experience, trying the query again an
+    hour later typically (but not always) fixes it.
     """
     # In our experience, after a few hours the streaming logs have all
     # the data, so don't even both to check this if the logs are from
     # more than, say, 4-5 hours ago.
+    # TODO(csilvers): this isn't always true!  What to do?
     if start_time + datetime.timedelta(hours=5) < datetime.datetime.utcnow():
         return True
 
     hourly_log_table = _hourly_table_name(start_time)
+    # This buckets the logs by 5 minutes, which seems to be a good interval.
     query = """\
-SELECT "old" as which, count(1) as count
+SELECT FORMAT_UTC_USEC(INTEGER(end_time / 300) * 300000000) as interval,
+       COUNT(1) as count
 FROM %(table)s
-WHERE end_time_timestamp BETWEEN
-      TIMESTAMP("%(YYYYMMDD_HH)s:50:00 UTC") AND
-      TIMESTAMP("%(YYYYMMDD_HH)s:54:59 UTC")
-UNION ALL
-SELECT "new" as which, count(1) as count
-FROM %(table)s
-WHERE end_time_timestamp BETWEEN
-      TIMESTAMP("%(YYYYMMDD_HH)s:55:00 UTC") AND
-      TIMESTAMP("%(YYYYMMDD_HH)s:59:59 UTC")
+GROUP BY interval
+ORDER BY interval
 """ % {
     'table': hourly_log_table,
     'YYYYMMDD_HH': start_time.strftime("%Y-%m-%d %H")
 }
 
     results = subprocess.check_output(
-        ['bq', '-q', '--headless', '--format', 'json',
-         '--project_id', _PROJECT,
-         'query', '--nouse_legacy_sql', query])
+        ['bq', '-q', '--headless', '--project_id', _PROJECT,
+         '--format', 'json', 'query', query])
     results = json.loads(results)
 
-    old_count = int(next(r['count'] for r in results if r['which'] == 'old'))
-    new_count = int(next(r['count'] for r in results if r['which'] == 'new'))
-    difference = (new_count - old_count) * 100.0 / old_count
-
-    # We expect some difference, but if it's more than a few percent
-    # that indicates a problem.
-    if difference <= -5:
-        logging.error("Error reading from streaming logs: The last 5 "
-                      "minutes of %s have %.2f%% fewer "
-                      "loglines than the preceding 5 minutes",
-                      hourly_log_table, -difference)
+    for i in xrange(1, len(results)):
+        new_count = int(results[i]['count'])
+        old_count = int(results[i - 1]['count'])
+        difference = (new_count - old_count) * 100.0 / old_count
+        # We expect some difference, but if it's more than a few percent
+        # that indicates a problem.
+        if difference <= -10:
+            logging.error(
+                "Error reading from streaming logs: The 5 minutes of %s "
+                "starting at %s have %.2f%% fewer loglines than the "
+                "preceding 5 minutes:\n%s",
+                hourly_log_table, results[i]['interval'], -difference,
+                '\n'.join(json.dumps(e) for e in results))
         return False
     return True
 
