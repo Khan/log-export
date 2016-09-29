@@ -293,12 +293,6 @@ def _hourly_logs_seem_complete(start_time):
     against it and fail.  In our experience, trying the query again an
     hour later typically (but not always) fixes it.
     """
-    # In our experience, after a few hours the streaming logs have all
-    # the data, so don't even both to check this if the logs are from
-    # more than, say, 12 hours ago.
-    if start_time + datetime.timedelta(hours=12) < datetime.datetime.utcnow():
-        return True
-
     hourly_log_table = _hourly_table_name(start_time)
     # This buckets the logs by 5 minutes, which seems to be a good interval.
     query = """\
