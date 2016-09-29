@@ -279,7 +279,7 @@ def _table_decorator_end_time(end_time):
         logging.warning("Streaming logs not up to date, waiting %ds..." % wait)
         time.sleep(wait)
 
-    logging.fatal("Streaming logs never got up to date.")
+    raise RuntimeError("Streaming logs never got up to date.")
 
 
 def _hourly_logs_seem_complete(start_time):
@@ -295,9 +295,8 @@ def _hourly_logs_seem_complete(start_time):
     """
     # In our experience, after a few hours the streaming logs have all
     # the data, so don't even both to check this if the logs are from
-    # more than, say, 4-5 hours ago.
-    # TODO(csilvers): this isn't always true!  What to do?
-    if start_time + datetime.timedelta(hours=5) < datetime.datetime.utcnow():
+    # more than, say, 12 hours ago.
+    if start_time + datetime.timedelta(hours=12) < datetime.datetime.utcnow():
         return True
 
     hourly_log_table = _hourly_table_name(start_time)
@@ -335,16 +334,27 @@ ORDER BY interval
     return True
 
 
-def _next_hourly_table_time():
-    """The smallest datetime we don't have a table for in logs_hourly.
+def _times_of_missing_tables(end_time):
+    """All hourly tables in the week(ish) before end_time that don't exist.
 
-    If the most recent table is more than 7 days ago, returns the
-    beginning of the day 6 days ago, which is about as long back as
-    you can query the streaming logs efficiently.
+    This returns a list of datetime objects that correspond to tables
+    that should exist in the "hourly logs" dataset but don't.
+    (Typically there will just be one such table, the one for the
+    previous hour.)
 
-    If the logs_hourly dataset is empty, returns midnight today.  (We
-    could have picked any value up to 7 days ago, but this seemed like
-    a reasonable boostrapping value.)
+    We start looking for tables starting about 6 days before
+    start_time, or the first table in the dataset, whichever comes
+    last.  (As a special case, if the logs_hourly dataset is totally
+    empty, we make start_time be midnight today.  This could also have
+    been 6 days ago, but I wanted to make the initial population of
+    this dataset not take forever.)  I picked 6 days because our
+    table-decorators only work for 7 days, and this gives us a bit of
+    slack.)
+
+    Note that we do *not* return end_time: this is all tables that
+    are missing in the hours BEFORE end_time.
+
+    end_time should be a date-time object.
     """
     today = datetime.datetime.utcnow()
     midnight = datetime.datetime(today.year, today.month, today.day)
@@ -353,18 +363,25 @@ def _next_hourly_table_time():
                                       '--project_id', _PROJECT,
                                       'ls', '-n', '100000', _HOURLY_DATASET])
     if not output:
-        return midnight
+        table_names = [None]
+        start_time = midnight
+    else:
+        all_hourly_tables = json.loads(output)
+        table_names = sorted(d['tableId'] for d in all_hourly_tables
+                             if d['tableId'].startswith('requestlogs_'))
+        start_time = end_time - datetime.timedelta(days=6)
 
-    all_hourly_tables = json.loads(output)
-    table_names = [d['tableId'] for d in all_hourly_tables
-                   if d['tableId'].startswith('requestlogs_')]
-    latest_table = max(table_names)
+    retval = []
+    hour = start_time
+    while hour < end_time:
+        table_name = hour.strftime('requestlogs_%Y%m%d_%H')
+        if (table_name not in table_names and
+                # Ignore candidate tables before the first table in our dataset
+                table_name > table_names[0]):
+            retval.append(hour)
+        hour += datetime.timedelta(hours=1)
 
-    table_time = datetime.datetime.strptime(latest_table,
-                                            'requestlogs_%Y%m%d_%H')
-    next_table_time = table_time + datetime.timedelta(hours=1)
-    six_days_ago = midnight - datetime.timedelta(days=6)
-    return max(next_table_time, six_days_ago)
+    return retval
 
 
 def _create_hourly_table(start_time, interactive=False, dry_run=False):
@@ -516,12 +533,16 @@ def _remove_tables_at_time(table_time):
         pass
 
 
+class RaisedSignal(Exception):
+    pass
+
+
 def _signal_handler(signal_number, _stackframe):
     signals_to_names = dict((getattr(signal, n), n)
         for n in dir(signal) if n.startswith('SIG') and '_' not in n)
 
     # Throw an exception from the signal_handler to hit the catch clause.
-    raise RuntimeError("Caught signal %s." % signals_to_names[signal_number])
+    raise RaisedSignal("Caught signal %s" % signals_to_names[signal_number])
 
 
 def main(interactive, dry_run):
@@ -529,31 +550,29 @@ def main(interactive, dry_run):
     now = datetime.datetime.utcnow()
     start_of_this_hour = datetime.datetime(now.year, now.month, now.day,
                                            now.hour)
-    # TODO(csilvers): deal properly with the case where the hourly table
-    # was created but crashed before updating the daily table.
-    next_hourly_table_time = _next_hourly_table_time()
-    while next_hourly_table_time < start_of_this_hour:
+    times_to_build = _times_of_missing_tables(start_of_this_hour)
+    logging.info("Creating the following log-tables: %s",
+                 ", ".join(_hourly_table_name(h) for h in times_to_build))
+
+    for next_hourly_table_time in times_to_build:
         printable_time = next_hourly_table_time.ctime()
 
         logging.info("Processing logs at %s (UTC)", printable_time)
         try:
             _create_hourly_table(next_hourly_table_time, interactive, dry_run)
+        except RaisedSignal as e:
+            logging.info("Received a signal: %s.  Deleting logs-in-process "
+                         "for %s and exiting", e, printable_time)
+            _remove_tables_at_time(next_hourly_table_time)
+            return
         except Exception as e:
-            start_time = time.time()
             logging.exception("Error creating tables for "
                 "%s, deleting it to be safe: %s" % (printable_time, e))
             _remove_tables_at_time(next_hourly_table_time)
-
-            the_rest_of_four_minutes = start_time + (4 * 60) - time.time()
-            if the_rest_of_four_minutes > 0:
-                logging.info("Waiting %.2f minutes to try and let daily_table"
-                    " finish updating.", the_rest_of_four_minutes / 60)
-                time.sleep(the_rest_of_four_minutes)
-            return
+            # Move on to the next log, see if we can process that one.
+            continue
 
         logging.info("DONE processing logs at %s (UTC)", printable_time)
-
-        next_hourly_table_time += datetime.timedelta(hours=1)
 
 
 if __name__ == '__main__':
