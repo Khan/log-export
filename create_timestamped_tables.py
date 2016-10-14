@@ -178,6 +178,10 @@ USING (request_id)
 """
 
 
+class HourlyTableIncomplete(Exception):
+    pass
+
+
 def _now():
     """Now, as a time_t."""
     return calendar.timegm(datetime.datetime.utcnow().timetuple())
@@ -285,13 +289,24 @@ def _table_decorator_end_time(end_time):
 def _hourly_logs_seem_complete(start_time):
     """Return True if the given table seems to have all the data it ought.
 
-    We were seeing some problems, in our QA testing, where we compared
-    the hourly logs created by this script with ones created by a
-    separate process (the logs_to_bigquery mapreduce).  We noticed
-    that this log could be missing hundreds of thousands of lines.  We
-    don't understand really how this could happen, but we can test
-    against it and fail.  In our experience, trying the query again an
-    hour later typically (but not always) fixes it.
+    Normally the pub-sub that generates our logs_streaming input table
+    works great, and inserts log-records to logs_stream in almost real
+    time.  But sometimes it gets into trouble and starts delivering
+    log-records out of order.  Sometimes way out of order: the loglines
+    for 1:15pm, say, may not come in until 4:15.  In the meantime, other
+    loglines (like at 1:20pm) continue to come in as normal.
+
+    What this means is that if you do a query for the 1 o'clock hour
+    at, say, 2:15, you'll see a big dip in the number of loglines seen
+    between 1:15 and 1:20.
+
+    We look for that dip, and report if we see it.  If so, the caller
+    may want to wait and query again (and with a later end-time for
+    the table decorator).
+
+    We look for a dip, which is a reduction and then rise in # of
+    queries.  At the end of our hourly log, though, we just look for
+    the reduction.
     """
     hourly_log_table = _hourly_table_name(start_time)
     # This buckets the logs by 5 minutes, which seems to be a good interval.
@@ -311,20 +326,44 @@ ORDER BY interval
          '--format', 'json', 'query', query])
     results = json.loads(results)
 
+    dip_start = None
+    dip_end = None
     for i in xrange(1, len(results)):
         new_count = int(results[i]['count'])
         old_count = int(results[i - 1]['count'])
         difference = (new_count - old_count) * 100.0 / old_count
-        # We expect some difference, but if it's more than a few percent
-        # that indicates a problem.
-        if difference <= -10:
-            logging.error(
-                "Error reading from streaming logs: The 5 minutes of %s "
-                "starting at %s have %.2f%% fewer loglines than the "
-                "preceding 5 minutes:\n%s",
-                hourly_log_table, results[i]['interval'], -difference,
-                '\n'.join(json.dumps(e) for e in results))
-            return False
+        # There's normal variation, so we only say it's a dip if
+        # the drop is more than, say, 3%.  This number is arbitrary.
+        if difference <= -3:
+            dip_start = results[i]['interval']
+            pre_dip_amount = old_count
+            dip_difference = difference
+        elif dip_start is not None:
+            difference_from_pre_dip = ((new_count - pre_dip_amount) * 100.0
+                                       / pre_dip_amount)
+            # If we're back to pre-dip levels (ignoring normal variance)
+            if difference_from_pre_dip > -2:
+                dip_end = results[i]['interval']
+                break
+
+    # If we just saw the dip start, but didn't see it end, it means
+    # that the dip happened at the end of the hour.  We need a bit
+    # more evidence of a dip to report a problem then, since it could
+    # just be normal traffic drop-off at the end of the day.
+    if dip_start and not dip_end and dip_difference <= -10:
+        dip_end = "the end of the hour"
+
+    if dip_start and dip_end:
+        logging.error(
+            "Error reading from streaming logs at %s: The logs from %s - %s "
+            "have %.2f%% fewer loglines than expected:\n%s",
+            hourly_log_table, dip_start, dip_end, -dip_difference,
+            '\n'.join(json.dumps(e) for e in results))
+        return False
+
+    # TODO(csilvers): if we saw a dip in this hour before, and now
+    # it's gone, we may still want to wait another hour or two to see
+    # if more loglines come straggling in.
     return True
 
 
@@ -378,7 +417,8 @@ def _times_of_missing_tables(end_time):
     return retval
 
 
-def _create_hourly_table(start_time, interactive=False, dry_run=False):
+def _create_hourly_table(start_time, search_harder_for_loglines,
+                         interactive=False, dry_run=False):
     """Copy an hour's worth of logs from streaming to a new table.
 
     This stores logs for all requests that *ended* between
@@ -386,6 +426,13 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
     Each request is a single row in the output table.  start_time
     should be a datetime at an hour boundary.  It is interpreted as
     a UTC time (everything about logs is UTC-only).
+
+    If search_harder_for_loglines is True, then we do not specify
+    an end-time to the table-decorator that limits how much of the
+    logs_streaming input we look at.  (We still specify a start-time.)
+    This is useful when we think that the records for this hour have
+    been delivered way out of order; so much so that they may have
+    come in hours or days after start_time.
 
     This raises an error if the table already exists.
     """
@@ -416,7 +463,8 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
         'start_time': start_time_t,
         'end_time': end_time_t,
         'start_ms': (start_time_t - 10 * 60) * 1000,
-        'end_ms': _table_decorator_end_time(end_time_t),
+        'end_ms': (int(time.time()) * 1000 if search_harder_for_loglines
+                   else _table_decorator_end_time(end_time_t)),
         'vm_filtered_temptable': vm_subtable,
         'reqlog_fields': ', '.join(reqlog_fields),
         'kalog_fields': ', '.join(kalog_fields),
@@ -468,9 +516,9 @@ def _create_hourly_table(start_time, interactive=False, dry_run=False):
 
     # Sanity check on the hourly logs.
     if not _hourly_logs_seem_complete(start_time):
-        logging.error("Deleting %s", hourly_table)
+        logging.info("Deleting %s: seems incomplete", hourly_table)
         _remove_tables_at_time(start_time)
-        raise RuntimeError("%s seems to be incomplete" % hourly_table)
+        raise HourlyTableIncomplete()
 
     # Call update_schema to make sure that the daily table has all the
     # columns the hourly table does, in case some just got added.
@@ -553,7 +601,17 @@ def main(interactive, dry_run):
 
         logging.info("Processing logs at %s (UTC)", printable_time)
         try:
-            _create_hourly_table(next_hourly_table_time, interactive, dry_run)
+            try:
+                _create_hourly_table(next_hourly_table_time,
+                                     interactive, dry_run)
+            except HourlyTableIncomplete:
+                # Try again, but searching over more of logs_streaming for
+                # the loglines: maybe they're just way out-of-order.
+                logging.info("Trying this hour again, but searching harder "
+                             "for those missing loglines")
+                _create_hourly_table(next_hourly_table_time,
+                                     search_harder_for_loglines=True,
+                                     interactive=interactive, dry_run=dry_run)
         except RaisedSignal as e:
             logging.info("Received a signal: %s.  Deleting logs-in-process "
                          "for %s and exiting", e, printable_time)
