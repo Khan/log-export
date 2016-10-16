@@ -333,8 +333,8 @@ ORDER BY interval
         old_count = int(results[i - 1]['count'])
         difference = (new_count - old_count) * 100.0 / old_count
         # There's normal variation, so we only say it's a dip if
-        # the drop is more than, say, 3%.  This number is arbitrary.
-        if difference <= -3:
+        # the drop is more than, say, 5%.  This number is arbitrary.
+        if difference <= -5:
             dip_start = results[i]['interval']
             pre_dip_amount = old_count
             dip_difference = difference
