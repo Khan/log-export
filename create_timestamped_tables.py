@@ -307,6 +307,10 @@ def _hourly_logs_seem_complete(start_time):
     We look for a dip, which is a reduction and then rise in # of
     queries.  At the end of our hourly log, though, we just look for
     the reduction.
+
+    TODO(csilvers): better would be to find the best-fit sine curve
+    for this data, and complain if some number of consecutive counts
+    seem way out of line with the best-fit curve.
     """
     hourly_log_table = _hourly_table_name(start_time)
     # This buckets the logs by 5 minutes, which seems to be a good interval.
@@ -341,8 +345,11 @@ ORDER BY interval
         elif dip_start is not None:
             difference_from_pre_dip = ((new_count - pre_dip_amount) * 100.0
                                        / pre_dip_amount)
-            # If we're back to pre-dip levels (ignoring normal variance)
-            if difference_from_pre_dip > -2:
+            # If we're back to pre-dip levels (ignoring normal variance).
+            # Note we ignore if the new value is too *high* in addition
+            # to too low, since that means something else weird is going
+            # on, and not a dip.
+            if difference_from_pre_dip > -2 and difference_from_pre_dip < 5:
                 dip_end = results[i]['interval']
                 break
 
