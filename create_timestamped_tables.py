@@ -523,9 +523,18 @@ def _create_hourly_table(start_time, search_harder_for_loglines,
 
     # Sanity check on the hourly logs.
     if not _hourly_logs_seem_complete(start_time):
-        logging.info("Deleting %s: seems incomplete", hourly_table)
-        _remove_tables_at_time(start_time)
-        raise HourlyTableIncomplete()
+        if datetime.datetime.now() - start_time > datetime.timedelta(hours=12):
+            # If things haven't caught up in 12 hours, we'll take it that
+            # this data is actually correct, and just a weird spike for
+            # some reason.
+            # TODO(csilvers): maybe not do this if the data looks *really*
+            # off?
+            logging.warning("%s kinda looks incomplete but I guess it's just "
+                            "weird access patterns; continuing", hourly_table)
+        else:
+            logging.info("Deleting %s: seems incomplete", hourly_table)
+            _remove_tables_at_time(start_time)
+            raise HourlyTableIncomplete()
 
     # Call update_schema to make sure that the daily table has all the
     # columns the hourly table does, in case some just got added.
