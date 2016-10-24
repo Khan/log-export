@@ -39,6 +39,7 @@ public class EventLogParser {
             eventLogField("device_type", Type.STRING),
             eventLogField("ka_locale", Type.STRING),
             eventLogField("language", Type.STRING),
+            eventLogField("tree_locale", Type.STRING),
             eventLogField("orig_request_id", Type.STRING),
             eventLogField("os", Type.STRING),
             eventLogField("pageload", Type.BOOLEAN),
