@@ -286,8 +286,8 @@ def _table_decorator_end_time(end_time):
     raise RuntimeError("Streaming logs never got up to date.")
 
 
-def _hourly_logs_seem_complete(start_time):
-    """Return True if the given table seems to have all the data it ought.
+def _assert_hourly_logs_seem_complete(start_time):
+    """Raise if the given table doesn't seem to have all the data it ought.
 
     Normally the pub-sub that generates our logs_streaming input table
     works great, and inserts log-records to logs_stream in almost real
@@ -361,17 +361,15 @@ ORDER BY interval
         dip_end = "the end of the hour"
 
     if dip_start and dip_end:
-        logging.error(
+        raise HourlyTableIncomplete(
             "Error reading from streaming logs at %s: The logs from %s - %s "
-            "have %.2f%% fewer loglines than expected:\n%s",
-            hourly_log_table, dip_start, dip_end, -dip_difference,
-            '\n'.join(json.dumps(e) for e in results))
-        return False
+            "have %.2f%% fewer loglines than expected:\n%s"
+            % (hourly_log_table, dip_start, dip_end, -dip_difference,
+               '\n'.join(json.dumps(e) for e in results)))
 
     # TODO(csilvers): if we saw a dip in this hour before, and now
     # it's gone, we may still want to wait another hour or two to see
     # if more loglines come straggling in.
-    return True
 
 
 def _times_of_missing_tables(end_time):
@@ -522,19 +520,24 @@ def _create_hourly_table(start_time, search_harder_for_loglines,
               _sanitize_query(_VM_MODULES_QUERY % sql_dict)])
 
     # Sanity check on the hourly logs.
-    if not _hourly_logs_seem_complete(start_time):
+    try:
+        _assert_hourly_logs_seem_complete(start_time)
+    except HourlyTableIncomplete as e:
         if datetime.datetime.now() - start_time > datetime.timedelta(hours=12):
             # If things haven't caught up in 12 hours, we'll take it that
             # this data is actually correct, and just a weird spike for
-            # some reason.
+            # some reason.  We log as an ERROR because we could easily
+            # be getting this wrong, so we want to alert pretty loudly.
             # TODO(csilvers): maybe not do this if the data looks *really*
             # off?
-            logging.warning("%s kinda looks incomplete but I guess it's just "
-                            "weird access patterns; continuing", hourly_table)
+            logging.error("%s kinda looks incomplete but I guess it's just "
+                          "weird access patterns; continuing:\n%s",
+                          hourly_table, e)
         else:
-            logging.info("Deleting %s: seems incomplete", hourly_table)
+            logging.info("Deleting %s: seems incomplete:\n%s",
+                         hourly_table, e)
             _remove_tables_at_time(start_time)
-            raise HourlyTableIncomplete()
+            raise
 
     # Call update_schema to make sure that the daily table has all the
     # columns the hourly table does, in case some just got added.
@@ -552,7 +555,7 @@ def _create_hourly_table(start_time, search_harder_for_loglines,
 
 
 def setup_logging(verbose):
-    """Log DEBUG/INFO to stdout, WARNING/ERROR to stderr.
+    """Log DEBUG/INFO/WARNING to stdout, ERROR to stderr.
 
     The reason we care is this is run from cron, which will send stdout
     to a logfile and stderr out as mail.
@@ -577,7 +580,7 @@ def setup_logging(verbose):
     logger.addHandler(logging_handler_out)
 
     logging_handler_err = logging.StreamHandler(sys.stderr)
-    logging_handler_err.setLevel(logging.WARNING)
+    logging_handler_err.setLevel(logging.ERROR)
     logging_handler_err.setFormatter(formatter)
     logger.addHandler(logging_handler_err)
 
