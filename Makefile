@@ -66,6 +66,6 @@ deploy_prod:
             --runner=DataflowPipelineRunner \
             --subscription=projects/khan-academy/subscriptions/log_export \
             --outputTable=khan-academy:logs_streaming.logs_all_time"
-	echo "Now visit"
-	echo "   https://console.cloud.google.com/dataflow?project=khan-academy"
-	echo "to disable the old dataflow job"
+	@echo "Now visit"
+	@echo "   https://console.cloud.google.com/dataflow?project=khan-academy"
+	@echo "to disable the old dataflow job"
