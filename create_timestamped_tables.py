@@ -637,7 +637,7 @@ def main(interactive, dry_run):
             _remove_tables_at_time(next_hourly_table_time)
             return
         except Exception as e:
-            logging.exception("Error creating tables for "
+            logging.warning("Error creating tables for "
                 "%s, deleting it to be safe: %s" % (printable_time, e))
             _remove_tables_at_time(next_hourly_table_time)
             # Move on to the next log, see if we can process that one.
