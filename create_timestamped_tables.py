@@ -42,10 +42,7 @@ import update_schema
 # The project where _HOURLY_DATASET and _DAILY_DATASET live.
 _PROJECT = 'khanacademy.org:deductive-jet-827'
 _HOURLY_DATASET = 'logs_hourly'
-_DAILY_DATASET = 'hourly'
-# TODO(csilvers): remove these next two lines once we're willing to go live!
-_HOURLY_DATASET = 'logs_new'
-_DAILY_DATASET = 'logs_new'
+_DAILY_DATASET = 'logs'
 
 
 # This string should be instantiated with a dict with these fields:
