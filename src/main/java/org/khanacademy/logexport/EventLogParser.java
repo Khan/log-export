@@ -118,7 +118,7 @@ public class EventLogParser {
         // TODO(alan): Doing a startsWith for every category for every event is kind of expensive.
         // Maybe profile this code and see if it's worth doing something more clever.
         Optional<EventLogField> foundCategory =
-                CATEGORIES.stream().filter(category -> category.name.startsWith(key)).findFirst();
+                CATEGORIES.stream().filter(category -> key.startsWith(category.name)).findFirst();
 
         if (foundCategory.isPresent()) {
             EventLogField eventLogField = foundCategory.get();
