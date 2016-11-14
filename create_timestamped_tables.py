@@ -520,7 +520,8 @@ def _create_hourly_table(start_time, search_harder_for_loglines,
     try:
         _assert_hourly_logs_seem_complete(start_time)
     except HourlyTableIncomplete as e:
-        if datetime.datetime.now() - start_time > datetime.timedelta(hours=12):
+        if (datetime.datetime.utcnow() - start_time
+                > datetime.timedelta(hours=12)):
             # If things haven't caught up in 12 hours, we'll take it that
             # this data is actually correct, and just a weird spike for
             # some reason.  We log as an ERROR because we could easily
