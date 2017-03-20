@@ -1,8 +1,10 @@
 package org.khanacademy.logexport;
 
-import com.google.api.services.logging.v2beta1.model.LogEntry;
+import com.google.api.services.logging.v2.model.LogEntry;
 import com.google.common.collect.ImmutableMap;
 
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.util.Map;
 
 /**
@@ -50,10 +52,16 @@ public enum LogType {
         } else {
             logName = log.getLogName();
         }
-
         // Log names look like "appengine.googleapis.com/request_log", get the
-        // last field.
-        String[] parts = logName.split("/");
+        // last field.  Names may be urlencoded, so we try to decode first.
+
+        String decoded = logName;
+        try {
+            decoded = URLDecoder.decode(logName, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            System.err.println("Caught unexpected error while URL decoding log name; ignoring.");
+        }
+        String[] parts = decoded.split("/");
         String key = parts[parts.length - 1];
 
         // We only have these type of logs defined, but safety first.

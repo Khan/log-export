@@ -3,7 +3,7 @@ package org.khanacademy.logexport;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.bigquery.model.TableRow;
-import com.google.api.services.logging.v2beta1.model.LogEntry;
+import com.google.api.services.logging.v2.model.LogEntry;
 import com.google.cloud.dataflow.sdk.Pipeline;
 import com.google.cloud.dataflow.sdk.io.BigQueryIO;
 import com.google.cloud.dataflow.sdk.io.BigQueryIO.Write.CreateDisposition;

@@ -1,6 +1,6 @@
 package org.khanacademy.logexport;
 
-import com.google.api.services.logging.v2beta1.model.LogEntry;
+import com.google.api.services.logging.v2.model.LogEntry;
 
 import java.util.HashMap;
 import java.util.Map;

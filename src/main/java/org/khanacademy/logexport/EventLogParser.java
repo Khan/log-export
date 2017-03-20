@@ -3,7 +3,7 @@ package org.khanacademy.logexport;
 import com.google.api.client.util.ArrayMap;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableRow;
-import com.google.api.services.logging.v2beta1.model.LogLine;
+import com.google.api.services.logging.v2.model.LogLine;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import org.khanacademy.logexport.Schemas.Type;

@@ -1,6 +1,6 @@
 package org.khanacademy.logexport;
 
-import com.google.api.services.logging.v2beta1.model.LogEntry;
+import com.google.api.services.logging.v2.model.LogEntry;
 
 /**
  * Enum for determining the API version of a log based on various fields.
