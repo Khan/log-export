@@ -1,6 +1,7 @@
 package org.khanacademy.logexport;
 
 import com.google.api.services.logging.v2.model.LogEntry;
+import com.google.api.services.logging.v2.model.LogLine;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -20,8 +21,23 @@ import java.util.function.Function;
  */
 public class AppLogTransformer implements Function<LogEntry, LogEntry> {
 
+    private static String getPayloadText(LogEntry log) {
+        String textPayload = "";
+        if (log.getTextPayload() != null) {
+            textPayload = log.getTextPayload();
+        } else {
+            Object payload = log.get("payload");
+            try {
+                textPayload = (String) ((Map<String, Object>) payload).get("logMessage");
+            } catch (java.lang.ClassCastException e) {
+                textPayload = (String) payload;
+            }
+        }
+        return textPayload;
+    }
+
     // Fill out the applogs (`protopayload.line`) as reasonably as we can
-    private static ArrayList<Map<String, Object>> generateAppLogs(LogEntry log) {
+    private static ArrayList<LogLine> generateAppLogs(LogEntry log) {
         /* `protopayload.line` is a field that has an array of entries that look
          * like:
          * {
@@ -35,8 +51,9 @@ public class AppLogTransformer implements Function<LogEntry, LogEntry> {
          * We choose to fill out time, severity, and logMessage using the fields
          * we have available.
          */
-        ArrayList<Map<String, Object>> newAppLogs = new ArrayList<Map<String, Object>>();
-        Map<String, Object> line = new HashMap<String, Object>();
+        ArrayList<LogLine> newAppLogs = new ArrayList<LogLine>();
+        //Map<String, Object> line = new HashMap<String, Object>();
+        LogLine line = new LogLine();
 
         String severity = "";
         String timestamp = "";
@@ -51,7 +68,7 @@ public class AppLogTransformer implements Function<LogEntry, LogEntry> {
         }
 
         // Set the various fields of the line that we need
-        line.put("logMessage", log.getTextPayload());
+        line.put("logMessage", getPayloadText(log));
         line.put("severity", severity);
         line.put("time", timestamp);
 
@@ -68,6 +85,7 @@ public class AppLogTransformer implements Function<LogEntry, LogEntry> {
         String thread_id = "";
         String timestamp = "";
         String module_id = "";
+        String version_id = "";
         if (LogAPIVersion.apiVersion(log) == LogAPIVersion.V1) {
             Map<String, Object> metadata = (Map<String, Object>) log.get("metadata");
             Map<String, Object> labels = (Map<String, Object>) metadata.get("labels");
@@ -77,6 +95,15 @@ public class AppLogTransformer implements Function<LogEntry, LogEntry> {
         } else {
             thread_id = (String) log.getLabels().get("appengine.googleapis.com/thread_id");
             module_id = (String) log.getLabels().get("appengine.googleapis.com/module_id");
+            version_id = (String) log.getLabels().get("appengine.googleapis.com/version_id");
+            Map<String, String> resourceLabels = (Map<String, String>) ((Map<String, Object>) log.get("resource")).get("labels");
+            if (module_id == null) {
+                module_id = resourceLabels.get("module_id");
+            }
+            if (version_id == null) {
+                version_id = resourceLabels.get("version_id");
+            }
+
             timestamp = log.getTimestamp();
         }
 
@@ -90,13 +117,16 @@ public class AppLogTransformer implements Function<LogEntry, LogEntry> {
         // Fill out the module_id so we know where this came from.
         newProtoPayload.put("moduleId", module_id);
 
+        newProtoPayload.put("versionId", version_id);
+
+        String payloadText = getPayloadText(log);
         // Do we have a request_id in here?
-        if (log.getTextPayload().startsWith("REQUEST_ID: ")) {
+        if (payloadText != null && payloadText.startsWith("REQUEST_ID: ")) {
             // If we do, it's from the anchor message emitted in
             // `webapp/middleware.LogRequestIdMiddleware` if you change the
             // format there, make sure to change it here!
             int beginIndex = "REQUEST_ID: ".length();
-            newProtoPayload.put("requestId", log.getTextPayload().substring(beginIndex));
+            newProtoPayload.put("requestId", payloadText.substring(beginIndex));
         }
 
         // Finally, generate the app_logs and put them in place.
@@ -111,7 +141,9 @@ public class AppLogTransformer implements Function<LogEntry, LogEntry> {
     public LogEntry apply(LogEntry log) {
         LogEntry workingLog = new LogEntry();
         workingLog.setTextPayload(null);
-        workingLog.setProtoPayload(generateProtoPayload(log));
+        Map<String, Object> protoPayload = generateProtoPayload(log);
+        workingLog.setProtoPayload(protoPayload);
+        workingLog.set("payload", protoPayload);
         return workingLog;
     }
 }

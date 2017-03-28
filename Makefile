@@ -17,7 +17,7 @@ run_locally:
 # subscription (and thus doesn't interfere with the production job).
 # This version does not exit and writes job logs to the console.
 deploy_test:
-	./update_schema.py -t khan-academy.logs_streaming_test.test_logs
+	./update_schema.py -t khan-academy.logs_streaming.logs_20170324_00_reconstructed
 	mvn compile exec\:java \
 		-Dexec.mainClass=org.khanacademy.logexport.LogExportPipeline \
 		-Dexec.args=" \
@@ -25,8 +25,8 @@ deploy_test:
             --stagingLocation=$(STAGING_LOCATION) \
             --workerMachineType=$(MACHINE_TYPE) \
             --runner=BlockingDataflowPipelineRunner \
-            --topic=projects/khan-academy/topics/request_logs \
-            --outputTable=khan-academy:logs_streaming_test.test_logs"
+            --topic=projects/khan-academy/topics/reconstruction_of_request_logs \
+            --outputTable=khan-academy:logs_streaming.logs_20170324_00_reconstructed"
 
 # Deploy a dataflow pipeline hooked up against the real production data, except
 # that it writes to a test output table and doesn't use the production

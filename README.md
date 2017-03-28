@@ -1,5 +1,11 @@
 # log-export
 
+Note: this branch contains temporary changes never deployed to production used for the restoration
+of logs lost on 20170324 via the stackdriver API.  The API doesn't format data quite the same as we
+receive it from the log export, so some changes were needed to paper over the differences.
+
+This branch is here just for archival purposes.
+
 A Google Cloud Dataflow streaming job to export Khan Academy logs to BigQuery.
 
 To get started, first follow the [Cloud Dataflow instructions](https://cloud.google.com/dataflow/getting-started#DevEnv) to set up your dependencies.

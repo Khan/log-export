@@ -8,6 +8,7 @@ import org.khanacademy.logexport.Schemas.Type;
 
 import javax.annotation.Nullable;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -55,7 +56,8 @@ public class StandardLogFieldParser {
 
     public void populateStandardLogFields(TableRow row, LogEntry logEntry) {
         for (StandardLogField field : ALL_FIELDS) {
-            Object value = logEntry.getProtoPayload().get(field.protoPayloadName);
+            Object payload = logEntry.get("payload");
+            Object value = ((Map<String, Object>) payload).get(field.protoPayloadName);
             if (field.transformer != null) {
                 value = field.transformer.transform(value);
             }

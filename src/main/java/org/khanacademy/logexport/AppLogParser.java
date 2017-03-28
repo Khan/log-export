@@ -31,7 +31,8 @@ public class AppLogParser {
      */
     public List<LogLine> getLogLines(LogEntry logEntry) {
         ImmutableList.Builder<LogLine> resultBuilder = ImmutableList.builder();
-        Object rawLinesObject = logEntry.getProtoPayload().get("line");
+        Map<String, Object> payload = (Map<String, Object>) logEntry.get("payload");
+        Object rawLinesObject = payload.get("line");
         if (rawLinesObject instanceof List) {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> rawLines = (List<Map<String, Object>>) rawLinesObject;
