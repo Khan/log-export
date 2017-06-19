@@ -43,7 +43,8 @@ public class StandardLogFieldParser {
             logField("thread_id", Type.STRING, "threadId"),
             logField("replica_index", Type.INTEGER, "instanceIndex"),
             logField("url_map_entry", Type.STRING, "urlMapEntry"),
-            logField("was_loading_request", Type.BOOLEAN, "wasLoadingRequest")
+            logField("was_loading_request", Type.BOOLEAN, "wasLoadingRequest"),
+            logField("trace_id", Type.STRING, "traceId")
     );
 
     public List<TableFieldSchema> getSchemaFields() {
