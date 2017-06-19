@@ -49,7 +49,8 @@ deploy_test_nonblocking:
 # running; you need to go into the dataflow UI and stop them directly:
 # https://console.cloud.google.com/dataflow?project=khan-academy. To stop a
 # job, click the job; then, under 'Summary', on the 'Job Status' line, click
-# 'Stop job' next to 'Running'.
+# 'Stop job' next to 'Running'. When given the choice, be sure to select the
+# option to drain the remaining buffered data.
 # If a pipeline is running, the log processing work will be split between the
 # two pipelines, since they will share a subscription. If no pipeline is
 # running, a backlog of work will accumulate on the subscription and this
