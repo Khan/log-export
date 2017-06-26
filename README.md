@@ -1,5 +1,7 @@
 # log-export
 
+DEPRECATED.  KA developers: this code has moved into the `dataflow/log-export` directory in the main webapp repository.
+
 A Google Cloud Dataflow streaming job to export Khan Academy logs to BigQuery.
 
 To get started, first follow the [Cloud Dataflow instructions](https://cloud.google.com/dataflow/getting-started#DevEnv) to set up your dependencies.
