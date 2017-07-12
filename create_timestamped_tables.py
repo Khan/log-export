@@ -409,6 +409,12 @@ def _times_of_missing_tables(end_time):
     retval = []
     hour = start_time
     while hour < end_time:
+        # While switching over to a new system for exporting request logs, we
+        # need to make sure we're not producing duplicate logs.  Midnight UTC
+        # on 2017-07-13 is the switchover time, so don't process anything after
+        # that.
+        if hour >= datetime.datetime(2017, 7, 13, 0, 0, 0):
+            break
         table_name = hour.strftime('requestlogs_%Y%m%d_%H')
         if (table_name not in table_names and
                 # Ignore candidate tables before the first table in our dataset
